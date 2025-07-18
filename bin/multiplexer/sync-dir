@@ -1,0 +1,4 @@
+#!/bin/bash
+DIR="$1"
+tmux send-keys -t terminal "cd '$DIR'" Enter
+tmux send-keys -t terminal C-l
