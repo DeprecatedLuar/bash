@@ -4,7 +4,7 @@ NOTES_DIR="$HOME/Documents/Notes"
 mkdir -p "$NOTES_DIR"
 
 # Get note from rofi
-note=$(echo "" | rofi -dmenu -p "" -lines 0 -no-fixed-num-lines -width 50 -theme ~/.config/rofi/themes/minimal.rasi)
+note=$(echo "" | rofi -dmenu -p "" -lines 0 -no-fixed-num-lines -width 50 -theme ~/.config/bash/bin/notetaker/notetaker.rasi)
 
 
 if [ -n "$note" ]; then

@@ -1,0 +1,33 @@
+#!/bin/bash
+# Place this in ~/.config/bash/bin/multiplexer/tmux-send
+# Make executable with: chmod +x ~/.config/bash/bin/multiplexer/tmux-send
+
+# Configuration
+VIM_SESSION="vim-session"  # Change this to your vim tmux session name
+
+# Check if file argument is provided
+if [ $# -eq 0 ]; then
+    echo "Usage: tmux-send <file>"
+    exit 1
+fi
+
+# Get the file path
+FILE="$1"
+
+# Convert to absolute path if relative
+if [[ ! "$FILE" = /* ]]; then
+    FILE="$(pwd)/$FILE"
+fi
+
+# Check if the tmux session exists
+if ! tmux has-session -t "$VIM_SESSION" 2>/dev/null; then
+    echo "Error: tmux session '$VIM_SESSION' not found"
+    echo "Available sessions:"
+    tmux list-sessions 2>/dev/null || echo "No tmux sessions running"
+    exit 1
+fi
+
+# Send the vim command to the session
+tmux send-keys -t "$VIM_SESSION" "vim \"$FILE\"" Enter
+
+echo "Sent file to vim session: $FILE"

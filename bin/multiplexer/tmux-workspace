@@ -1,0 +1,110 @@
+#!/bin/bash
+# Tmux workspace management functions
+
+# Start all tmux sessions for VS Code-like development environment
+start-workspace() {
+    echo ""    
+    echo "Starting development workspace..."
+    
+    # Check if sessions already exist
+    local sessions_exist=false
+    if tmux has-session -t editor 2>/dev/null || tmux has-session -t filemanager 2>/dev/null || tmux has-session -t terminal 2>/dev/null; then
+        echo "⚠️  Some sessions already exist:"
+        tmux list-sessions 2>/dev/null | grep -E "(editor|filemanager|terminal)" || true
+        echo ""
+        read -p "Kill existing sessions and restart? (y/n): " -r
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            tmux kill-session -t editor 2>/dev/null || true
+            tmux kill-session -t filemanager 2>/dev/null || true
+            tmux kill-session -t terminal 2>/dev/null || true
+            tmux kill-session -t txrminal 2>/dev/null || true
+
+            echo ""
+            echo "✅ Existing sessions killed"
+            echo ""
+        else
+            echo "❌ Cancelled - use existing sessions"
+            echo ""
+            return 1
+        fi
+    fi
+    
+    # Start all sessions in detached mode
+    tmux new-session -d -s editor vim
+    tmux new-session -d -s filemanager -c ~ ranger  
+    tmux new-session -d -s terminal
+    tmux new-session -d -s txrminal
+    
+    echo ""
+    echo "✅ Workspace started successfully!"
+    echo ""
+    echo "--- Quick attach ---"
+    echo ""
+    echo "  tmux a -t filemanager"
+    echo "  tmux a -t editor"  
+    echo "  tmux a -t terminal"
+    echo ""
+    echo "--- Session info ---"
+    echo "  List sessions:    tmux list-sessions"
+    echo "  Kill workspace:   kill-workspace"
+    echo ""
+
+    cool-retro-term -e tmux attach -t editor &
+    cool-retro-term -e tmux attach -t filemanager &
+    cool-retro-term -e tmux attach -t terminal &
+    cool-retro-term -e tmux attach -t txrminal &
+}
+
+# Kill all workspace sessions
+kill-workspace() {
+    echo ""
+    echo "🛑 Killing development workspace..."
+    tmux kill-session -t editor 2>/dev/null && echo "✅ Editor session killed" || echo "❌ Editor session not found"
+    tmux kill-session -t filemanager 2>/dev/null && echo "✅ File manager session killed" || echo "❌ File manager session not found"
+    tmux kill-session -t terminal 2>/dev/null && echo "✅ Terminal session killed" || echo "❌ Terminal session not found"
+    echo "✅ Workspace cleanup complete"
+    echo ""
+}
+
+# Smart session attachment with fallback creation
+tmux-editor() {
+    if tmux has-session -t editor 2>/dev/null; then
+        tmux attach -t editor
+    else
+        echo "Creating new editor session..."
+        tmux new-session -s editor vim
+    fi
+}
+
+tmux-files() {
+    if tmux has-session -t filemanager 2>/dev/null; then
+        tmux attach -t filemanager
+    else
+        echo "Creating new file manager session..."
+        tmux new-session -s filemanager -c ~ ranger
+    fi
+}
+
+tmux-terminal() {
+    if tmux has-session -t terminal 2>/dev/null; then
+        tmux attach -t terminal
+    else
+        echo "Creating new terminal session..."
+        tmux new-session -s terminal
+        echo ""
+    fi
+}
+
+# Execute function if script is called directly with function name
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    if declare -f "$1" > /dev/null; then
+        "$@"
+    else
+        echo "Available functions:"
+        echo "  start-workspace"
+        echo "  kill-workspace"
+        echo "  tmux-editor"
+        echo "  tmux-files"
+        echo "  tmux-terminal"
+    fi
+fi

@@ -122,9 +122,9 @@ if ! shopt -oq posix; then
   fi
 fi
 
-# =====================================================
-# LOAD CUSTOM CONFIGURATIONS
-# =====================================================
+#------- LOAD CUSTOM CONFIGURATIONS -------
 
 # Load all custom configurations
-[ -f ~/.config/bash/modules/magazine.sh ] && source ~/.config/bash/modules/magazine.sh
+[ -f ~/.config/bash/modules/universal/source.sh ] && source ~/.config/bash/modules/universal/source.sh
+
+
