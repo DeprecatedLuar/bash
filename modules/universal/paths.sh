@@ -3,7 +3,8 @@
 
 #------------------- UNIVERSAL PATHS ----------------------
 
-export PATH="$HOME/Documents/Dev/software:$PATH"
+export PATH="$HOME/Documents/Tools/my-scripts:$PATH"
+export PATH="$HOME/Documents/Tools/external-repos:$PATH"
 export PATH="$HOME/.config/bash/modules:$PATH"  # Add your bash scripts
 export PATH="$HOME/.local/bin:$PATH"
 
