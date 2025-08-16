@@ -21,3 +21,7 @@ export TERM=xterm-256color
 # Set default editor
 export EDITOR=vim
 export VISUAL=vim
+
+#--------------------- RUNTIME VARS ------------------------
+
+export CONFIG_918=jIT7yE7lnOJkZgQhuCYcJMf1fiyF9l0ywGk5
