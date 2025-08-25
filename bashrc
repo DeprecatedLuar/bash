@@ -128,3 +128,4 @@ fi
 [ -f ~/.config/bash/modules/universal/source.sh ] && source ~/.config/bash/modules/universal/source.sh
 
 
+. "$HOME/.cargo/env"
