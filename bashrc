@@ -12,6 +12,9 @@ esac
 # HISTORY CONFIGURATION
 # =====================================================
 
+# Set history file location
+export HISTFILE="$HOME/.config/bash/.history"
+
 #don't put duplicate lines or lines starting with space in the history.
 HISTCONTROL=ignoreboth
 # append to the history file, don't overwrite it
@@ -19,6 +22,25 @@ shopt -s histappend
 # for setting history length see HISTSIZE and HISTFILESIZE in bash(1)
 HISTSIZE=1000
 HISTFILESIZE=2000
+
+# Logout functionality - clear console on exit for privacy (login shells)
+if [[ $SHLVL -eq 1 ]]; then
+    trap 'clear_console -q 2>/dev/null || clear' EXIT
+fi
+
+# =====================================================
+# DEVELOPMENT TOOLS CONFIGURATION
+# =====================================================
+
+# Rust tools - organized in bash config folder
+export CARGO_HOME="$HOME/.config/bash/dev-tools/cargo"
+export RUSTUP_HOME="$HOME/.config/bash/dev-tools/rustup"
+
+# npm - organized in bash config folder  
+export NPM_CONFIG_PREFIX="$HOME/.config/bash/dev-tools/npm"
+
+# Go tools - using system installation
+# Custom GOROOT/GOPATH removed to use Go modules properly
 
 # =====================================================
 # SHELL OPTIONS
@@ -128,4 +150,5 @@ fi
 [ -f ~/.config/bash/modules/universal/source.sh ] && source ~/.config/bash/modules/universal/source.sh
 
 
-. "$HOME/.cargo/env"
+# Cargo environment now handled in DEVELOPMENT TOOLS CONFIGURATION section above
+umask 002

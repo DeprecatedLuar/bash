@@ -8,6 +8,13 @@ export PATH="$HOME/Documents/Tools/foreign:$PATH"
 export PATH="$HOME/.config/bash/modules:$PATH"  # Add your bash scripts
 export PATH="$HOME/.local/bin:$PATH"
 
+#-------------------- DEV TOOLS PATHS ----------------------
+
+# Add dev tools to PATH (environment variables set in .bashrc)
+export PATH="$CARGO_HOME/bin:$PATH"           # Rust
+export PATH="$NPM_CONFIG_PREFIX/bin:$PATH"    # npm 
+# Go removed - using system installation
+
 #-------------------- SCRIPT PATHS -------------------------
 
 export PATH="$HOME/.config/bash/bin:$PATH"  # Add your bash scripts

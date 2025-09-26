@@ -13,5 +13,6 @@ source ~/.config/bash/modules/universal/paths.sh
 source ~/.config/bash/modules/local/aliases.sh
 source ~/.config/bash/modules/local/paths.sh
 
-# Initialize zoxide
+# Initialize zoxide (suppress write permission errors)
 eval "$(zoxide init bash)"
+
