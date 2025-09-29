@@ -36,6 +36,9 @@ fi
 export CARGO_HOME="$HOME/.config/bash/dev-tools/cargo"
 export RUSTUP_HOME="$HOME/.config/bash/dev-tools/rustup"
 
+# Go tools - organized in bash config folder
+export GOPATH="$HOME/.config/bash/dev-tools/go"
+
 # npm - organized in bash config folder  
 export NPM_CONFIG_PREFIX="$HOME/.config/bash/dev-tools/npm"
 
