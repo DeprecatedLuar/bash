@@ -71,6 +71,7 @@ case "$1" in
         echo "Commands:"
         echo "  edit local [alias|paths]      - Edit local config"
         echo "  edit universal [alias|paths]  - Edit universal config"
+        echo "  install [universal|dev-tools|all]  - Install packages"
         echo "  update                        - Pull latest from GitHub"
         echo ""
         echo "Shortcuts:"

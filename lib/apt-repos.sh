@@ -26,4 +26,4 @@ curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
 echo "  Updating package lists..."
 sudo apt update
 
-echo "✅ Repository setup complete!"
+echo "Repository setup complete!"

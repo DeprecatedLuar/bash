@@ -16,10 +16,6 @@ export PATH="$CARGO_HOME/bin:$PATH"           # Rust
 export PATH="$GOPATH/bin:$PATH"               # Go
 export PATH="$NPM_CONFIG_PREFIX/bin:$PATH"    # npm
 
-#-------------------- SCRIPT PATHS -------------------------
-
-export PATH="$HOME/.config/bash/bin:$PATH"  # Add your bash scripts
-
 #------------------------ EXTRAS ---------------------------
 
 export TERM=xterm-256color

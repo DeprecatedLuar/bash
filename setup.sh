@@ -24,18 +24,22 @@ OS=$(detect_os)
 echo "Detected OS: $OS"
 echo "Package manager: $PKG_MGR"
 
+# Setup repositories (only apt needs this)
 if [[ "$PKG_MGR" == "apt" ]]; then
     echo ""
     echo "Setting up apt repositories..."
     bash "$HOME/.config/bash/lib/apt-repos.sh"
-    
+fi
+
+# Install universal packages (works for any supported package manager)
+if [[ -f "$HOME/.config/bash/lib/${PKG_MGR}-packages.sh" ]]; then
     echo ""
     echo "Installing universal packages..."
     bash "$HOME/.config/bash/bin/bashrc" install universal
 else
     echo ""
-    echo "Non-Debian system detected - skipping package installation"
-    echo "You'll need to manually install: zoxide, ranger, micro, git, curl, wget"
+    echo "Unsupported package manager: $PKG_MGR"
+    echo "You'll need to manually install packages"
 fi
 
 # Step 3: Source configuration
