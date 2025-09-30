@@ -31,14 +31,19 @@ export TOOLS_HOMEMADE="$TOOLS/homemade"
 
 #------------------------ EXTRAS ---------------------------
 
-export TERM=xterm-256color
+# export TERM=xterm-256color  # Commented out - let terminal set its own TERM
 
 # Set default editor
-export EDITOR=micro
-export VISUAL=micro
+export EDITOR="micro"
+export VISUAL="micro"
+
+
+export DATA_VIEWER="visidata"
+export MEDIA_PLAYER="celluloid"
+export IMAGE_VIEWER="xdg-open"
 
 # Set default file manager
-export FILEMANAGER=nemo
+export FILEMANAGER="nemo"
 
 #--------------------- RUNTIME VARS ------------------------
 
