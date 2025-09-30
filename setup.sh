@@ -13,6 +13,11 @@ echo "Created symlinks:"
 echo "  ~/.bashrc -> ~/.config/bash/bashrc"
 echo "  ~/.profile -> ~/.config/bash/profile"
 
+# Step 1.5: Create workspace structure
+echo ""
+echo "Step 1.5: Creating workspace structure..."
+bash "$HOME/.config/bash/lib/init-workspace.sh"
+
 # Step 2: Detect OS and setup package management
 echo ""
 echo "Step 2: Setting up package management..."
