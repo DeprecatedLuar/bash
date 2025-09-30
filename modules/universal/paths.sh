@@ -5,9 +5,8 @@
 
 export PATH="$TOOLS_HOMEMADE/bin:$PATH"
 export PATH="$TOOLS_FOREIGN:$PATH"
-export PATH="$HOME/.config/bash/modules:$PATH"  # Add your bash scripts
 export PATH="$HOME/.local/bin:$PATH"
-export PATH="$HOME/.config/bash/bin:$PATH"
+export PATH="$BASHRC/bin:$PATH"
 
 #-------------------- DEV TOOLS PATHS ----------------------
 
@@ -15,6 +14,20 @@ export PATH="$HOME/.config/bash/bin:$PATH"
 export PATH="$CARGO_HOME/bin:$PATH"           # Rust
 export PATH="$GOPATH/bin:$PATH"               # Go
 export PATH="$NPM_CONFIG_PREFIX/bin:$PATH"    # npm
+
+#--------------------- WORKSPACE VARS ----------------------
+
+# Bash folder
+export BASHRC="$HOME/.config/bash"
+
+# Standard workspace locations
+export WORKSPACE_ROOT="$HOME/Workspace"
+export TOOLS="$WORKSPACE_ROOT/tools"
+export PROJECTS="$WORKSPACE_ROOT/projects"
+
+# Tools subdirectories
+export TOOLS_FOREIGN="$TOOLS/foreign"
+export TOOLS_HOMEMADE="$TOOLS/homemade"
 
 #------------------------ EXTRAS ---------------------------
 
@@ -26,17 +39,6 @@ export VISUAL=micro
 
 # Set default file manager
 export FILEMANAGER=nemo
-
-#--------------------- WORKSPACE VARS ----------------------
-
-# Standard workspace locations
-export WORKSPACE_ROOT="$HOME/Workspace"
-export TOOLS="$WORKSPACE_ROOT/tools"
-export PROJECTS="$WORKSPACE_ROOT/projects"
-
-# Tools subdirectories
-export TOOLS_FOREIGN="$TOOLS/foreign"
-export TOOLS_HOMEMADE="$TOOLS/homemade"
 
 #--------------------- RUNTIME VARS ------------------------
 
