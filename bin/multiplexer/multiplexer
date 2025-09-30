@@ -1,6 +1,0 @@
-#!/bin/bash
-FILE="$1"
-
-# Press Escape to ensure we're in normal mode, then run the command
-tmux send-keys -t editor Escape
-tmux send-keys -t editor ":if &modified | tabnew $FILE | else | e $FILE | endif" Enter

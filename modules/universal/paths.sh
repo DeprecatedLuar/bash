@@ -3,10 +3,11 @@
 
 #------------------- UNIVERSAL PATHS ----------------------
 
-export PATH="$TOOLS_HOMEMADE:$PATH"
+export PATH="$TOOLS_HOMEMADE/bin:$PATH"
 export PATH="$TOOLS_FOREIGN:$PATH"
 export PATH="$HOME/.config/bash/modules:$PATH"  # Add your bash scripts
 export PATH="$HOME/.local/bin:$PATH"
+export PATH="$HOME/.config/bash/bin:$PATH"
 
 #-------------------- DEV TOOLS PATHS ----------------------
 
@@ -26,6 +27,9 @@ export TERM=xterm-256color
 # Set default editor
 export EDITOR=micro
 export VISUAL=micro
+
+# Set default file manager
+export FILEMANAGER=nemo
 
 #--------------------- WORKSPACE VARS ----------------------
 

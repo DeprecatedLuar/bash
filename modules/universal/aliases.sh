@@ -1,9 +1,8 @@
 #!/bin/bash
-# Custom aliases
+# == UNIVERSAL aliases ==
 
 alias gte='gnome-text-editor'
-
-
+alias reload='source ~/.bashrc'
 
 
 
