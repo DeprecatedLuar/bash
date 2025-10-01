@@ -35,7 +35,34 @@ case "$1" in
         ;;
     
     init)
-        bash "$HOME/.config/bash/lib/init-workspace.sh"
+        case "$2" in
+            dots)
+                echo "Initializing dotfiles..."
+                
+                # Clone if doesn't exist
+                if [[ -d ~/.config/dots ]]; then
+                    echo "✓ Dotfiles already exist at ~/.config/dots"
+                else
+                    echo "→ Cloning dotfiles repository..."
+                    git clone https://github.com/DeprecatedLuar/dots ~/.config/dots
+                    echo "✓ Dotfiles cloned"
+                fi
+                
+                # Symlink the binary
+                echo "→ Installing dots binary..."
+                ln -sf ~/.config/dots/.bin/dots ~/.local/bin/dots
+                chmod +x ~/.config/dots/.bin/dots
+                
+                echo ""
+                echo "✓ Dotfiles initialized!"
+                echo ""
+                echo "Run 'dots help' to see available commands"
+                echo "Run 'dots status' to see your dotfiles status"
+                ;;
+            workspace|"")
+                bash "$HOME/.config/bash/lib/init-workspace.sh"
+                ;;
+        esac
         ;;
 
     update)
@@ -46,38 +73,38 @@ case "$1" in
         echo "Run reload to apply changes"
         ;;
 
-	install)
-	    source "$HOME/.config/bash/lib/os-detect.sh"
-	    PKG_MGR=$(detect_package_manager)
-	    
-	    if [[ ! -f "$HOME/.config/bash/lib/${PKG_MGR}-packages.sh" ]]; then
-	        echo "Error: Unsupported package manager: $PKG_MGR"
-	        echo "No lib/${PKG_MGR}-packages.sh found"
-	        exit 1
-	    fi
-	    
-	    # Source the package file (contains arrays + install function)
-	    source "$HOME/.config/bash/lib/${PKG_MGR}-packages.sh"
-	    
-	    case "$2" in
-	        universal) install_packages "${UNIVERSAL[@]}" ;;
-	        dev-tools) install_packages "${DEV_TOOLS[@]}" ;;
-	        all) install_packages "${UNIVERSAL[@]}" "${DEV_TOOLS[@]}" ;;
-	        *)
-	            echo "Usage: bashrc install [universal|dev-tools|all]"
-	            ;;
-	    esac
-	    ;;
+    install)
+        source "$HOME/.config/bash/lib/os-detect.sh"
+        PKG_MGR=$(detect_package_manager)
+        
+        if [[ ! -f "$HOME/.config/bash/lib/${PKG_MGR}-packages.sh" ]]; then
+            echo "Error: Unsupported package manager: $PKG_MGR"
+            echo "No lib/${PKG_MGR}-packages.sh found"
+            exit 1
+        fi
+        
+        # Source the package file (contains arrays + install function)
+        source "$HOME/.config/bash/lib/${PKG_MGR}-packages.sh"
+        
+        case "$2" in
+            universal) install_packages "${UNIVERSAL[@]}" ;;
+            dev-tools) install_packages "${DEV_TOOLS[@]}" ;;
+            all) install_packages "${UNIVERSAL[@]}" "${DEV_TOOLS[@]}" ;;
+            *)
+                echo "Usage: bashrc install [universal|dev-tools|all]"
+                ;;
+        esac
+        ;;
     
     *)
         echo "Usage: bashrc <command>"
         echo ""
         echo "Commands:"
-        echo "  edit local [alias|paths]      - Edit local config"
-        echo "  edit universal [alias|paths]  - Edit universal config"
-        echo "  init                          - Create workspace structure"
+        echo "  edit local [alias|paths]       - Edit local config"
+        echo "  edit universal [alias|paths]   - Edit universal config"
+        echo "  init [workspace|dots]          - Initialize workspace or dotfiles"
         echo "  install [universal|dev-tools|all]  - Install packages"
-        echo "  update                        - Pull latest from GitHub"
+        echo "  update                         - Pull latest from GitHub"
         echo ""
         echo "Shortcuts:"
         echo "  ela  - edit local alias"

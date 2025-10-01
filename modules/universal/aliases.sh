@@ -1,7 +1,6 @@
 #!/bin/bash
 # == UNIVERSAL aliases ==
 
-alias gte='gnome-text-editor'
 alias reload='source ~/.bashrc && $BASHRC/lib/reload.sh '
 
 
@@ -10,6 +9,7 @@ alias reload='source ~/.bashrc && $BASHRC/lib/reload.sh '
 
 
 #------------------------------------------------------
+
 # Basic ls aliases
 alias ll='ls -alF'
 alias la='ls -A'
