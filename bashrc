@@ -155,3 +155,4 @@ fi
 
 # Cargo environment now handled in DEVELOPMENT TOOLS CONFIGURATION section above
 umask 002
+eval "$(starship init bash)"
