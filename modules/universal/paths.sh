@@ -3,7 +3,7 @@
 
 #------------------- UNIVERSAL PATHS ----------------------
 
-export PATH="$TOOLS_HOMEMADE/bin:$PATH"
+export PATH="$TOOLS/bin:$PATH"
 export PATH="$TOOLS_FOREIGN:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="$BASHRC/bin:$PATH"
@@ -27,24 +27,14 @@ export PROJECTS="$WORKSPACE_ROOT/projects"
 
 # Tools subdirectories
 export TOOLS_FOREIGN="$TOOLS/foreign"
-export TOOLS_HOMEMADE="$TOOLS/homemade"
 
 #------------------------ EXTRAS ---------------------------
 
 # export TERM=xterm-256color  # Commented out - let terminal set its own TERM
 
-# Set default editor
-export EDITOR="micro"
-export VISUAL="micro"
-
-
-export DATA_VIEWER="visidata"
-export MEDIA_PLAYER="celluloid"
-export IMAGE_VIEWER="xdg-open"
-
-# Set default file manager
-export FILEMANAGER="nemo"
+# Fix terminfo for Nix packages (so they can find kitty's xterm-kitty terminfo)
+export TERMINFO_DIRS="$HOME/.nix-profile/share/terminfo:/nix/var/nix/profiles/default/share/terminfo:/usr/share/terminfo${TERMINFO_DIRS:+:$TERMINFO_DIRS}"
 
 #--------------------- RUNTIME VARS ------------------------
 
-
+export QT_QPA_PLATFORMTHEME=qt5ct

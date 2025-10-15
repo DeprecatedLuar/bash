@@ -39,8 +39,11 @@ export RUSTUP_HOME="$HOME/.config/bash/dev-tools/rustup"
 # Go tools - organized in bash config folder
 export GOPATH="$HOME/.config/bash/dev-tools/go"
 
-# npm - organized in bash config folder  
+# npm - organized in bash config folder
 export NPM_CONFIG_PREFIX="$HOME/.config/bash/dev-tools/npm"
+
+# Homebrew - Linux package manager
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 
 # Go tools - using system installation
 # Custom GOROOT/GOPATH removed to use Go modules properly
@@ -156,3 +159,9 @@ fi
 # Cargo environment now handled in DEVELOPMENT TOOLS CONFIGURATION section above
 umask 002
 eval "$(starship init bash)"
+
+# Generated for envman. Do not edit.
+[ -s "$HOME/.config/envman/load.sh" ] && source "$HOME/.config/envman/load.sh"
+
+# Qt theme configuration
+export QT_QPA_PLATFORMTHEME=qt5ct
