@@ -22,6 +22,17 @@ sudo add-apt-repository ppa:longsleep/golang-backports -y
 echo "  Adding NodeSource PPA..."
 curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
 
+# Add PostgreSQL official repository for latest versions
+echo "  Adding PostgreSQL official repository..."
+sudo apt install -y curl ca-certificates
+sudo install -d /usr/share/postgresql-common/pgdg
+sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+
+# Add OBS Studio PPA
+echo "  Adding OBS Studio PPA..."
+sudo add-apt-repository ppa:obsproject/obs-studio -y
+
 # Update package list after adding all PPAs
 echo "  Updating package lists..."
 sudo apt update

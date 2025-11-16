@@ -1,60 +1,65 @@
 #!/bin/bash
 # Bash Config Setup Script
-# Run this after cloning to ~/.config/bash
+# Interactive setup for bash configuration
 
-echo "Setting up bash configuration..."
-
-# Step 1: Create symlinks (works on all systems)
+echo "Running interactive setup..."
 echo ""
-echo "Step 1: Creating shell configuration symlinks..."
-ln -sf "$HOME/.config/bash/bashrc" "$HOME/.bashrc"
-ln -sf "$HOME/.config/bash/profile" "$HOME/.profile"
-echo "Created symlinks:"
-echo "  ~/.bashrc -> ~/.config/bash/bashrc"
-echo "  ~/.profile -> ~/.config/bash/profile"
 
-# Step 1.5: Create workspace structure
-echo ""
-echo "Step 1.5: Creating workspace structure..."
-bash "$HOME/.config/bash/lib/init-workspace.sh"
+# Step 1: Workspace structure
+read -p "Create workspace structure? [Y/n] " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+    bash "$HOME/.config/bash/bin/lib/init-workspace.sh"
+fi
 
-# Step 2: Detect OS and setup package management
-echo ""
-echo "Step 2: Setting up package management..."
+# Step 2: Shell symlinks
+read -p "Create/update shell symlinks (~/.bashrc, ~/.profile)? [y/N] " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    ln -sf "$HOME/.config/bash/bashrc" "$HOME/.bashrc"
+    ln -sf "$HOME/.config/bash/profile" "$HOME/.profile"
+    echo "✓ Created symlinks"
+fi
 
-source "$HOME/.config/bash/lib/os-detect.sh"
+# Step 3: Install dotfiles
+read -p "Install dotfiles? [y/N] " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo "Installing dotfiles..."
+    curl -sSL https://raw.githubusercontent.com/DeprecatedLuar/ireallylovemydots/main/install.sh | bash
+fi
+
+# Step 4: Detect OS for package management
+source "$HOME/.config/bash/bin/lib/os-detect.sh"
 PKG_MGR=$(detect_package_manager)
-OS=$(detect_os)
 
-echo "Detected OS: $OS"
-echo "Package manager: $PKG_MGR"
-
-# Setup repositories (only apt needs this)
+# Step 5: Setup repositories (apt only)
 if [[ "$PKG_MGR" == "apt" ]]; then
-    echo ""
-    echo "Setting up apt repositories..."
-    bash "$HOME/.config/bash/lib/apt-repos.sh"
+    read -p "Setup package repositories? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        bash "$HOME/.config/bash/bin/lib/apt-repos.sh"
+    fi
 fi
 
-# Install universal packages (works for any supported package manager)
-if [[ -f "$HOME/.config/bash/lib/${PKG_MGR}-packages.sh" ]]; then
-    echo ""
-    echo "Installing universal packages..."
-    bash "$HOME/.config/bash/bin/bashrc" install universal
-else
-    echo ""
-    echo "Unsupported package manager: $PKG_MGR"
-    echo "You'll need to manually install packages"
+# Step 6: Install universal packages
+if [[ -f "$HOME/.config/bash/bin/lib/${PKG_MGR}-packages.sh" ]]; then
+    read -p "Install universal packages? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        source "$HOME/.config/bash/bin/lib/${PKG_MGR}-packages.sh"
+        install_packages "${UNIVERSAL[@]}"
+    fi
+
+    # Step 7: Install dev tools
+    read -p "Install dev tools? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        source "$HOME/.config/bash/bin/lib/${PKG_MGR}-packages.sh"
+        install_packages "${DEV_TOOLS[@]}"
+    fi
 fi
 
-# Step 3: Source configuration
 echo ""
-echo "Step 3: Loading new configuration..."
-source "$HOME/.profile"
-
-echo ""
-echo "Setup complete"
-echo ""
-echo "  - Run 'reload' to apply changes"
-echo "  - Run 'bashrc install dev-tools' for dev tools"
-echo "  - Run 'bashrc' to see available commands"
+echo "✓ Setup complete!"
+echo "Run 'reload' to apply changes"

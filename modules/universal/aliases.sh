@@ -4,6 +4,10 @@
 alias reload='source ~/.bashrc && $BASHRC/lib/reload.sh '
 
 
+alias eup='$EDITOR $BASHRC/modules/universal/paths.sh'
+alias eua='$EDITOR $BASHRC/modules/universal/aliases.sh'
+alias el='$EDITOR $BASHRC/modules/local.sh'
+
 
 
 
@@ -11,9 +15,10 @@ alias reload='source ~/.bashrc && $BASHRC/lib/reload.sh '
 #------------------------------------------------------
 
 # Basic ls aliases
-alias ll='ls -alF'
-alias la='ls -A'
-alias l='ls -CF'
+alias ll='exa -alF'
+alias la='exa -a'
+alias l='exa -F'
+alias ls='exa'
 
 # Add an "alert" alias for long running commands.  Use like so:
 #   sleep 10; alert

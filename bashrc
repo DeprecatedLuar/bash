@@ -42,6 +42,9 @@ export GOPATH="$HOME/.config/bash/dev-tools/go"
 # npm - organized in bash config folder
 export NPM_CONFIG_PREFIX="$HOME/.config/bash/dev-tools/npm"
 
+# Micro editor - enable true color support for colorschemes
+export MICRO_TRUECOLOR=1
+
 # Homebrew - Linux package manager
 eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 

@@ -1,18 +1,14 @@
 #!/bin/bash
 # Bash configuration magazine
 
-# Ensure local configuration files exist
-mkdir -p ~/.config/bash/modules/local
-touch ~/.config/bash/modules/local/aliases.sh
-touch ~/.config/bash/modules/local/paths.sh
+# Ensure local configuration file exists
+touch ~/.config/bash/modules/local.sh
 
 # Source all module files
 source ~/.config/bash/modules/universal/paths.sh
 source ~/.config/bash/modules/defaults/defaults.sh
 source ~/.config/bash/modules/universal/aliases.sh
-# Source local files
-source ~/.config/bash/modules/local/paths.sh
-source ~/.config/bash/modules/local/aliases.sh
+source ~/.config/bash/modules/local.sh
 
 # Initialize zoxide (suppress write permission errors)
 eval "$(zoxide init bash)"
