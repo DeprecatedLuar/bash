@@ -11,4 +11,10 @@ mkdir -p "$TOOLS/bin/completions"
 mkdir -p "$TOOLS_FOREIGN"
 mkdir -p "$HOMEMADE"
 mkdir -p "$DOCKER_DIR"
+
+# Create ~/bin directory structure
+mkdir -p "$HOME/bin"
+mkdir -p "$HOME/bin/lib"
+echo "Created ~/bin directory structure"
+
 echo "Workspace structure created at $WORKSPACE_ROOT"

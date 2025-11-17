@@ -27,7 +27,7 @@ export QT_QPA_PLATFORMTHEME=qt5ct
 
 #------------------- UNIVERSAL PATHS ----------------------
 
-export PATH="$TOOLS/bin:$PATH"
+export PATH="$HOME/bin:$PATH"
 export PATH="$TOOLS_FOREIGN:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="$BASHRC/bin:$PATH"
