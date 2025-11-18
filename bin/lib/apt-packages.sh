@@ -8,6 +8,9 @@ UNIVERSAL=(
     "ranger"
     "micro"
     "visidata"
+    "starship"
+    "ncdu"
+    "btop"
 )
 
 DEV_TOOLS=(

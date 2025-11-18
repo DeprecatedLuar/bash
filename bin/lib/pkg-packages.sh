@@ -6,7 +6,13 @@ UNIVERSAL=(
     "curl"
     "wget"
     "openssh"
+    "zoxide"
+    "ranger"
     "micro"
+    "visidata"
+    "starship"
+    "ncdu"
+    "btop"
 )
 
 DEV_TOOLS=(
