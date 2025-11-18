@@ -15,6 +15,8 @@ detect_os() {
 detect_package_manager() {
     if [[ -n "$TERMUX_VERSION" ]]; then
         echo "pkg"
+    elif command -v apk &> /dev/null; then
+        echo "apk"
     elif command -v apt &> /dev/null; then
         echo "apt"
     elif command -v pacman &> /dev/null; then
