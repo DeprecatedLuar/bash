@@ -1,6 +1,9 @@
 #!/bin/bash
 # ~/.config/bash/bin/sat - Satellite installer for bash config
 
+# Source environment variables
+source "$HOME/.config/bash/modules/universal/paths.sh"
+
 case "$1" in
     init)
         bash "$HOME/.config/bash/setup.sh"
