@@ -1,7 +1,7 @@
 #!/bin/bash
 # == UNIVERSAL aliases ==
 
-alias reload='source ~/.bashrc && $BASHRC/lib/reload.sh '
+alias reload='source ~/.bashrc && $BASHRC/bin/lib/reload.sh '
 
 
 alias eup='$EDITOR $BASHRC/modules/universal/paths.sh'

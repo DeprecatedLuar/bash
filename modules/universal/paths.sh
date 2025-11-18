@@ -3,15 +3,30 @@
 
 #==================== ENVIRONMENT VARIABLES ====================
 
-#--------------------- WORKSPACE VARS ----------------------
+#--------------------- SYSTEM DIRECTORIES ----------------------
 
-# Bash folder
+# Bash config
 export BASHRC="$HOME/.config/bash"
 
-# Standard workspace locations
-export WORKSPACE_ROOT="$HOME/Workspace"
-export TOOLS="$WORKSPACE_ROOT/tools"
-export PROJECTS="$WORKSPACE_ROOT/projects"
+# Home-level standard directories
+export BACKUP="$HOME/Backup"
+export MEDIA="$HOME/Media"
+export DOCUMENTS="$HOME/Documents"
+export DOWNLOADS="$HOME/Downloads"
+export GAMES="$HOME/Games"
+
+# Media subdirectories
+export AUDIO="$MEDIA/Audio"
+export PICTURES="$MEDIA/Pictures"
+export VIDEOS="$MEDIA/Videos"
+
+#--------------------- WORKSPACE VARS ----------------------
+
+# Workspace root and main directories
+export WORKSPACE="$HOME/Workspace"
+export TOOLS="$WORKSPACE/tools"
+export PROJECTS="$WORKSPACE/projects"
+export SHARED="$WORKSPACE/shared"
 
 # Tools subdirectories
 export TOOLS_FOREIGN="$TOOLS/foreign"
