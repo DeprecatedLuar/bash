@@ -9,7 +9,9 @@ echo ""
 read -p "Create workspace structure? [Y/n] " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-    bash "$HOME/.config/bash/bin/lib/init-workspace.sh"
+    # Source paths for GITHUB_USER variable
+    source "$HOME/.config/bash/modules/universal/paths.sh"
+    curl -sSL "https://raw.githubusercontent.com/$GITHUB_USER/the-satellite/main/satellite.sh" | bash -s -- init-workspace
 fi
 
 # Step 2: Shell symlinks
