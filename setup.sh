@@ -26,6 +26,16 @@ read -p "Install dotfiles? [y/N] " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "Installing dotfiles..."
+
+    # Clone dots repo to ~/.config/dots
+    if [ ! -d "$HOME/.config/dots" ]; then
+        echo "Cloning dots repository..."
+        git clone https://github.com/DeprecatedLuar/dots.git "$HOME/.config/dots"
+    else
+        echo "Dots repo already exists, skipping clone"
+    fi
+
+    # Install dots CLI tool
     curl -sSL https://raw.githubusercontent.com/DeprecatedLuar/ireallylovemydots/main/install.sh | bash
 fi
 
