@@ -27,6 +27,7 @@ export WORKSPACE="$HOME/Workspace"
 export TOOLS="$WORKSPACE/tools"
 export PROJECTS="$WORKSPACE/projects"
 export SHARED="$WORKSPACE/shared"
+export SATELLITE="$PROJECTS/cli/the-satellite"
 
 # Tools subdirectories
 export TOOLS_FOREIGN="$TOOLS/foreign"
@@ -45,7 +46,6 @@ export QT_QPA_PLATFORMTHEME=qt5ct
 export PATH="$HOME/bin:$PATH"
 export PATH="$TOOLS_FOREIGN:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
-export PATH="$BASHRC/bin:$PATH"
 
 #-------------------- DEV TOOLS PATHS ----------------------
 

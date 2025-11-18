@@ -31,6 +31,9 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     if [ ! -d "$HOME/.config/dots" ]; then
         echo "Cloning dots repository..."
         git clone https://github.com/DeprecatedLuar/dots.git "$HOME/.config/dots"
+    elif [ -z "$(ls -A "$HOME/.config/dots" 2>/dev/null)" ]; then
+        echo "Dots directory is empty, cloning..."
+        git clone https://github.com/DeprecatedLuar/dots.git "$HOME/.config/dots"
     else
         echo "Dots repo already exists, skipping clone"
     fi

@@ -1,0 +1,30 @@
+#!/bin/bash
+# ~/.config/bash/bin/sat - Satellite installer for bash config
+
+case "$1" in
+    init)
+        bash "$HOME/.config/bash/setup.sh"
+        ;;
+
+    update)
+        echo "Updating bash..."
+        cd "$HOME/.config/bash" || exit 1
+        git pull
+        echo "Update complete"
+        echo "Run reload to apply changes"
+        ;;
+
+    install)
+        # Call satellite for package installation
+        bash "$SATELLITE/satellite.sh" install-packages "$2"
+        ;;
+
+    *)
+        echo "Usage: sat <command>"
+        echo ""
+        echo "Commands:"
+        echo "  init                               - Interactive setup (workspace, symlinks, dotfiles, packages)"
+        echo "  install [universal|dev-tools|all]  - Install packages directly"
+        echo "  update                             - Pull latest from GitHub"
+        ;;
+esac

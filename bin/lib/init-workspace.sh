@@ -34,4 +34,7 @@ mkdir -p "$DOCKER_DIR"
 mkdir -p "$HOME/bin"
 mkdir -p "$HOME/bin/lib"
 
+# Create convenience symlink
+ln -sf "$HOME/.local/bin" "$HOME/bin/local"
+
 echo "✓ Complete directory structure created"

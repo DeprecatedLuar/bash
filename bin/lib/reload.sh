@@ -21,9 +21,33 @@ for script in "$TOOLS/bin"/*; do
     ln -sf "$script" "$target"
 done
 
+# Sync symlinks from bashrc/bin to ~/bin (excluding lib/)
+for script in "$BASHRC/bin"/*; do
+    [ -e "$script" ] || continue
+    [ -d "$script" ] && continue  # Skip directories
+
+    basename=$(basename "$script")
+    target="$HOME/bin/$basename"
+
+    # Create/update symlink
+    ln -sf "$script" "$target"
+done
+
 # Sync symlinks from tools/bin/lib to ~/bin/lib
 if [ -d "$TOOLS/bin/lib" ]; then
     for lib in "$TOOLS/bin/lib"/*; do
+        [ -e "$lib" ] || continue
+
+        basename=$(basename "$lib")
+        target="$HOME/bin/lib/$basename"
+
+        ln -sf "$lib" "$target"
+    done
+fi
+
+# Sync symlinks from bashrc/bin/lib to ~/bin/lib
+if [ -d "$BASHRC/bin/lib" ]; then
+    for lib in "$BASHRC/bin/lib"/*; do
         [ -e "$lib" ] || continue
 
         basename=$(basename "$lib")
