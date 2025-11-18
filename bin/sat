@@ -19,8 +19,8 @@ case "$1" in
 
     install)
         if [[ "$2" == "universal" ]] || [[ "$2" == "dev-tools" ]] || [[ "$2" == "all" ]]; then
-            # Package installation via satellite
-            bash "$SATELLITE/satellite.sh" install-packages "$2"
+            # Package installation via satellite (remote)
+            curl -sSL "https://raw.githubusercontent.com/$GITHUB_USER/the-satellite/main/satellite.sh" | bash -s -- install-packages "$2"
         elif [[ -n "$2" ]]; then
             # Install from repo's install.sh
             REPO="$2"
