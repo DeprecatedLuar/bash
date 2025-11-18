@@ -8,6 +8,9 @@
 # Bash config
 export BASHRC="$HOME/.config/bash"
 
+# GitHub user
+export GITHUB_USER="DeprecatedLuar"
+
 # Home-level standard directories
 export BACKUP="$HOME/Backup"
 export MEDIA="$HOME/Media"

@@ -15,8 +15,35 @@ case "$1" in
         ;;
 
     install)
-        # Call satellite for package installation
-        bash "$SATELLITE/satellite.sh" install-packages "$2"
+        if [[ "$2" == "universal" ]] || [[ "$2" == "dev-tools" ]] || [[ "$2" == "all" ]]; then
+            # Package installation via satellite
+            bash "$SATELLITE/satellite.sh" install-packages "$2"
+        elif [[ -n "$2" ]]; then
+            # Install from repo's install.sh
+            REPO="$2"
+            echo "Installing $REPO..."
+            curl -sSL "https://raw.githubusercontent.com/$GITHUB_USER/$REPO/main/install.sh" | bash
+        else
+            echo "Usage: sat install [universal|dev-tools|all|<repo>]"
+        fi
+        ;;
+
+    clone)
+        if [[ -z "$2" ]]; then
+            echo "Usage: sat clone <repo> [destination]"
+            exit 1
+        fi
+        REPO="$2"
+
+        if [[ -z "$3" ]]; then
+            read -p "Where to clone? (default: ./): " DEST
+            DEST="${DEST:-.}"
+        else
+            DEST="$3"
+        fi
+
+        echo "Cloning $GITHUB_USER/$REPO to $DEST..."
+        git clone "https://github.com/$GITHUB_USER/$REPO.git" "$DEST/$REPO"
         ;;
 
     *)
@@ -24,7 +51,9 @@ case "$1" in
         echo ""
         echo "Commands:"
         echo "  init                               - Interactive setup (workspace, symlinks, dotfiles, packages)"
-        echo "  install [universal|dev-tools|all]  - Install packages directly"
-        echo "  update                             - Pull latest from GitHub"
+        echo "  install [universal|dev-tools|all]  - Install system packages"
+        echo "  install <repo>                     - Install from repo's install.sh"
+        echo "  clone <repo> [dest]                - Clone your repo (default: current dir)"
+        echo "  update                             - Pull latest bash config from GitHub"
         ;;
 esac
