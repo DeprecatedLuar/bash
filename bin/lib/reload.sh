@@ -4,10 +4,12 @@ chmod +x $TOOLS/bin/* 2>/dev/null || true
 chmod +x $TOOLS/bin/lib/* 2>/dev/null || true
 chmod +x $BASHRC/lib/* 2>/dev/null || true
 chmod +x $BASHRC/bin/* 2>/dev/null || true
+chmod +x $HOME/bin/sys/* 2>/dev/null || true
 
 # Create ~/bin structure
 mkdir -p "$HOME/bin"
 mkdir -p "$HOME/bin/lib"
+mkdir -p "$HOME/bin/sys"
 
 # Sync symlinks from tools/bin to ~/bin (excluding lib/)
 for script in "$TOOLS/bin"/*; do
@@ -60,3 +62,4 @@ fi
 # Remove broken symlinks
 find "$HOME/bin" -maxdepth 1 -xtype l -delete 2>/dev/null || true
 find "$HOME/bin/lib" -maxdepth 1 -xtype l -delete 2>/dev/null || true
+find "$HOME/bin/sys" -maxdepth 1 -xtype l -delete 2>/dev/null || true
