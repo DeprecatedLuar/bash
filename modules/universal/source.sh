@@ -11,7 +11,7 @@ source ~/.config/bash/modules/universal/aliases.sh
 source ~/.config/bash/modules/local.sh
 
 # Initialize zoxide (suppress write permission errors)
-eval "$(zoxide init bash)"
+command -v zoxide &>/dev/null && eval "$(zoxide init bash)"
 
 # Source bash completions
 if [ -d "$TOOLS/bin/completions" ]; then

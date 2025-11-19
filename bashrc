@@ -163,7 +163,7 @@ fi
 
 # Cargo environment now handled in DEVELOPMENT TOOLS CONFIGURATION section above
 umask 002
-eval "$(starship init bash)"
+command -v starship &>/dev/null && eval "$(starship init bash)"
 
 # Generated for envman. Do not edit.
 [ -s "$HOME/.config/envman/load.sh" ] && source "$HOME/.config/envman/load.sh"
