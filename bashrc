@@ -46,7 +46,9 @@ export NPM_CONFIG_PREFIX="$HOME/.config/bash/dev-tools/npm"
 export MICRO_TRUECOLOR=1
 
 # Homebrew - Linux package manager
-eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+if [ -x "/home/linuxbrew/.linuxbrew/bin/brew" ]; then
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+fi
 
 # Go tools - using system installation
 # Custom GOROOT/GOPATH removed to use Go modules properly
