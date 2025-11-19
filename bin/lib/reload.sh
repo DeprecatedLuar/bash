@@ -1,4 +1,13 @@
 #!/bin/bash
+# Check core directories exist
+if [ ! -d "$TOOLS/bin" ]; then
+    echo "Warning: $TOOLS/bin not found. Skipping."
+fi
+
+if [ ! -d "$BASHRC/bin" ]; then
+    echo "Warning: $BASHRC/bin not found. Skipping."
+fi
+
 # Make scripts executable
 chmod +x $TOOLS/bin/* 2>/dev/null || true
 chmod +x $TOOLS/bin/lib/* 2>/dev/null || true
@@ -63,3 +72,29 @@ fi
 find "$HOME/bin" -maxdepth 1 -xtype l -delete 2>/dev/null || true
 find "$HOME/bin/lib" -maxdepth 1 -xtype l -delete 2>/dev/null || true
 find "$HOME/bin/sys" -maxdepth 1 -xtype l -delete 2>/dev/null || true
+
+# System sync if requested (-s/--system or -h/--hard)
+if [[ "$1" == "--system" ]] || [[ "$1" == "-s" ]] || [[ "$1" == "--hard" ]] || [[ "$1" == "-h" ]]; then
+    # Sync system-wide scripts
+    if [ -d "$HOME/bin/sys" ]; then
+        for script in "$HOME/bin/sys"/*; do
+            [ -e "$script" ] || continue
+            [ -d "$script" ] && continue
+            sudo ln -sf "$script" "/usr/local/bin/$(basename "$script")"
+        done
+    else
+        echo "Warning: $HOME/bin/sys not found. Skipping system scripts."
+    fi
+
+    # Sync systemd system services
+    if [ -d "$HOME/.config/systemd/system" ]; then
+        for service in "$HOME/.config/systemd/system"/*; do
+            [ -e "$service" ] || continue
+            [ -d "$service" ] && continue
+            sudo ln -sf "$service" "/etc/systemd/system/$(basename "$service")"
+        done
+        sudo systemctl daemon-reload
+    else
+        echo "Warning: $HOME/.config/systemd/system not found. Skipping systemd services."
+    fi
+fi

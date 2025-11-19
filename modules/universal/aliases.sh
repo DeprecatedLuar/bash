@@ -3,18 +3,7 @@
 
 reload() {
     source ~/.bashrc
-    $BASHRC/bin/lib/reload.sh
-
-    # System sync if requested (-s/--system or -h/--hard)
-    if [[ "$1" == "--system" ]] || [[ "$1" == "-s" ]] || [[ "$1" == "--hard" ]] || [[ "$1" == "-h" ]]; then
-        if [ -d "$HOME/bin/sys" ]; then
-            for script in "$HOME/bin/sys"/*; do
-                [ -e "$script" ] || continue
-                [ -d "$script" ] && continue
-                sudo ln -sf "$script" "/usr/local/bin/$(basename "$script")"
-            done
-        fi
-    fi
+    $BASHRC/bin/lib/reload.sh "$@"
 }
 
 
