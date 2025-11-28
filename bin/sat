@@ -5,10 +5,6 @@
 source "$HOME/.config/bash/modules/universal/paths.sh"
 
 case "$1" in
-    init)
-        bash "$HOME/.config/bash/setup.sh"
-        ;;
-
     update)
         cd "$HOME/.config/bash" || exit 1
         git pull
@@ -50,7 +46,6 @@ case "$1" in
         echo "Usage: sat <command>"
         echo ""
         echo "Commands:"
-        echo "  init                               - Interactive setup (workspace, symlinks, dotfiles, packages)"
         echo "  install [universal|dev-tools|all]  - Install system packages"
         echo "  install <repo>                     - Install from repo's install.sh"
         echo "  clone <repo> [dest]                - Clone your repo (default: current dir)"

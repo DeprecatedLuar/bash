@@ -6,6 +6,9 @@ reload() {
     $BASHRC/bin/lib/reload.sh "$@"
 }
 
+ensure-dirs() {
+    $BASHRC/bin/lib/ensure-dirs.sh "$@"
+}
 
 alias eup='$EDITOR $BASHRC/modules/universal/paths.sh'
 alias eua='$EDITOR $BASHRC/modules/universal/aliases.sh'

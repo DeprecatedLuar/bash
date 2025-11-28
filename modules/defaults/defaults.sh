@@ -3,7 +3,7 @@
 
 # Editor
 export EDITOR="micro"
-export VISUAL="micro"
+export VISUAL="code"
 
 # Browser
 export BROWSER="brave"
@@ -15,9 +15,7 @@ export IMAGE_VIEWER="xdg-open"
 
 # File Manager
 export FILEMANAGER="dolphin"
-
-# Terminal
 export TERMINAL="kitty"
 
-# XDG Portal (use native file pickers)
+# XDG Portal (native file pickers)
 export GTK_USE_PORTAL=1
