@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# ~/.config/bash/bin/sat - Satellite installer for bash config
+# ~/.config/bash/bin/sat - Satellite installer
 
-# Source environment variables
 source "$HOME/.config/bash/modules/universal/paths.sh"
+
+SAT_BASE="https://raw.githubusercontent.com/$GITHUB_USER/the-satellite/main"
 
 case "$1" in
     update)
@@ -11,16 +12,22 @@ case "$1" in
         ;;
 
     install)
-        if [[ "$2" == "universal" ]] || [[ "$2" == "dev-tools" ]] || [[ "$2" == "all" ]]; then
-            # Package installation via satellite (remote)
-            curl -sSL "https://raw.githubusercontent.com/$GITHUB_USER/the-satellite/main/satellite.sh" | bash -s -- install-packages "$2"
-        elif [[ -n "$2" ]]; then
-            # Install from repo's install.sh
-            REPO="$2"
-            echo "Installing $REPO..."
-            curl -sSL "https://raw.githubusercontent.com/$GITHUB_USER/$REPO/main/install.sh" | bash
+        if [[ -z "$2" ]]; then
+            echo "Usage: sat install <program|repo>"
+            exit 1
+        fi
+
+        PROGRAM="$2"
+
+        # Check if wrapper exists in cargo-bay/programs
+        WRAPPER_URL="$SAT_BASE/cargo-bay/programs/${PROGRAM}.sh"
+        if curl -sSL --fail --head "$WRAPPER_URL" >/dev/null 2>&1; then
+            echo "Installing $PROGRAM via wrapper..."
+            curl -sSL "$WRAPPER_URL" | bash
         else
-            echo "Usage: sat install [universal|dev-tools|all|<repo>]"
+            # Fall back to repo's install.sh
+            echo "No wrapper found, trying $PROGRAM repo..."
+            curl -sSL "https://raw.githubusercontent.com/$GITHUB_USER/$PROGRAM/main/install.sh" | bash
         fi
         ;;
 
@@ -42,13 +49,18 @@ case "$1" in
         git clone "https://github.com/$GITHUB_USER/$REPO.git" "$DEST/$REPO"
         ;;
 
+    list)
+        echo "Available programs:"
+        curl -sSL "$SAT_BASE/cargo-bay/programs/" 2>/dev/null | grep -oP '[\w-]+\.sh' | sed 's/\.sh$//' | sort
+        ;;
+
     *)
         echo "Usage: sat <command>"
         echo ""
         echo "Commands:"
-        echo "  install [universal|dev-tools|all]  - Install system packages"
-        echo "  install <repo>                     - Install from repo's install.sh"
-        echo "  clone <repo> [dest]                - Clone your repo (default: current dir)"
-        echo "  update                             - Pull latest bash config from GitHub"
+        echo "  install <program>   - Install program (wrapper or repo)"
+        echo "  clone <repo> [dest] - Clone your repo"
+        echo "  list                - List available program wrappers"
+        echo "  update              - Pull latest bash config"
         ;;
 esac
