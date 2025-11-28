@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Bash configuration magazine
 
 # Ensure local configuration file exists

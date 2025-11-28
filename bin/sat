@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # ~/.config/bash/bin/sat - Satellite installer for bash config
 
 # Source environment variables

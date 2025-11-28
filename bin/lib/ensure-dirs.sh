@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Ensure directory structure exists
 # Creates all directories declared in paths.sh
 

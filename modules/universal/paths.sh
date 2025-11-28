@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # PATH configurations
 
 #==================== ENVIRONMENT VARIABLES ====================

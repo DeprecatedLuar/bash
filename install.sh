@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Bash config bootstrap - curl one-liner installer
 
 TARGET="$HOME/.config/bash"
