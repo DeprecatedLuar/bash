@@ -13,7 +13,6 @@ mkdir -p "$BACKUP"
 mkdir -p "$MEDIA"
 mkdir -p "$DOCUMENTS"
 mkdir -p "$DOWNLOADS"
-mkdir -p "$GAMES"
 mkdir -p "$HOME/bin"
 mkdir -p "$HOME/bin/lib"
 mkdir -p "$HOME/bin/sys"
@@ -55,7 +54,7 @@ ln -sf .config "$HOME/Config" 2>/dev/null || true
 
 if [[ "$1" == "-v" ]] || [[ "$1" == "--verbose" ]]; then
     echo "✓ Directory structure verified:"
-    echo "  Home: bin, Backup, Media, Documents, Downloads, Games"
+    echo "  Home: bin, Backup, Media, Documents, Downloads"
     echo "  Media: Audio, Pictures, Videos"
     echo "  Workspace: projects, shared, tools"
     echo "  Tools: foreign, homemade, docker, bin"

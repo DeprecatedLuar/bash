@@ -20,11 +20,17 @@ alias el='$EDITOR $BASHRC/modules/local.sh'
 
 #------------------------------------------------------
 
-# Basic ls aliases
-alias ll='exa -alF'
-alias la='exa -a'
-alias l='exa -F'
-alias ls='exa'
+# Basic ls aliases (use exa if available)
+if command -v exa &>/dev/null; then
+    alias ls='exa'
+    alias ll='exa -alF'
+    alias la='exa -a'
+    alias l='exa -F'
+else
+    alias ll='ls -alF --color=auto'
+    alias la='ls -a --color=auto'
+    alias l='ls -F --color=auto'
+fi
 
 # Add an "alert" alias for long running commands.  Use like so:
 #   sleep 10; alert
