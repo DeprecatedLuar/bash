@@ -1,0 +1,44 @@
+#!/bin/bash
+
+LIB_DIR="$(dirname "$0")/lib"
+
+case "${1:-}" in
+    tray)
+        "$LIB_DIR/list-tray-apps.sh"
+        ;;
+    ports)
+        "$LIB_DIR/list-ports.sh"
+        ;;
+    port)
+        "$LIB_DIR/get-port-process.sh" "$2"
+        ;;
+    :*)
+        port="${1#:}"
+        "$LIB_DIR/get-port-process.sh" "$port"
+        ;;
+    cpu|ram|gpu|fan)
+        "$LIB_DIR/get-system-metrics.sh" "$@"
+        ;;
+    "")
+        "$LIB_DIR/get-system-metrics.sh"
+        ;;
+    *)
+        if [[ "$1" =~ ^[0-9]+$ ]]; then
+            output=$("$LIB_DIR/get-port-process.sh" "$1" 2>/dev/null)
+            if [[ "$output" == "Literally nothing on :"* ]]; then
+                if ! "$LIB_DIR/find-process.sh" -p "$1" 2>/dev/null; then
+                    echo "I didn't find anything"
+                fi
+            else
+                echo "$output"
+            fi
+        else
+            output=$("$LIB_DIR/find-process.sh" "$1" 2>/dev/null)
+            if [[ -n "$output" ]]; then
+                echo "$output"
+            else
+                echo "I didn't find anything"
+            fi
+        fi
+        ;;
+esac

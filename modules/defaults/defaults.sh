@@ -14,7 +14,7 @@ export MEDIA_PLAYER="celluloid"
 export IMAGE_VIEWER="xdg-open"
 
 # File Manager
-export FILEMANAGER="dolphin"
+export FILEMANAGER="thunar"
 export TERMINAL="kitty"
 
 # XDG Portal (native file pickers)

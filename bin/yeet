@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+COPY_MODE=false
+
+if [[ $# -lt 2 ]]; then
+    echo "Usage: yeet [-c|--copy] <file|folder> <host[:path]>"
+    echo "Example: yeet ./myfile.txt parxloid-nuremberg"
+    echo "Example: yeet ./myfile.txt prootstrap:~/Documents/backup/"
+    echo ""
+    echo "Options:"
+    echo "  -c, --copy    Copy file instead of moving (keeps source)"
+    echo ""
+    echo "Uses SSH config hostnames and rsyncs to ~/Workspace/shared/ by default"
+    echo "By default, source file is DELETED after transfer"
+    exit 1
+fi
+
+if [[ "$1" == "--copy" || "$1" == "-c" ]]; then
+    COPY_MODE=true
+    shift
+fi
+
+SOURCE="$1"
+HOST_PATH="$2"
+ORIGINAL_DIR=$(pwd)
+
+if [[ ! -e "$SOURCE" ]]; then
+    echo "Error: '$SOURCE' does not exist"
+    exit 1
+fi
+
+BASENAME=$(basename "$SOURCE")
+
+if [[ "$HOST_PATH" == *:* ]]; then
+    DEST="$HOST_PATH"
+else
+    DEST="${HOST_PATH}:~/Workspace/shared/"
+fi
+
+TEMP_DIR=""
+TEMP_SOURCE=""
+RSYNC_PID=""
+SUCCESS=false
+
+cleanup() {
+    if [ -n "$RSYNC_PID" ] && kill -0 $RSYNC_PID 2>/dev/null; then
+        kill $RSYNC_PID 2>/dev/null
+        wait $RSYNC_PID 2>/dev/null
+    fi
+
+    if [ "$COPY_MODE" = false ] && [ -n "$TEMP_DIR" ] && [ -d "$TEMP_DIR" ]; then
+        if [ "$SUCCESS" = false ] && [ -e "$TEMP_SOURCE" ]; then
+            mv "$TEMP_SOURCE" "$ORIGINAL_DIR/" 2>/dev/null
+        fi
+        rm -rf "$TEMP_DIR"
+    fi
+}
+
+trap cleanup INT TERM EXIT
+
+if [ "$COPY_MODE" = false ]; then
+    TEMP_DIR=$(mktemp -d)
+    TEMP_SOURCE="$TEMP_DIR/$BASENAME"
+    mv "$SOURCE" "$TEMP_SOURCE"
+    SOURCE="$TEMP_SOURCE"
+fi
+
+printf "Yeeting"
+
+rsync -az "$SOURCE" "$DEST" &
+RSYNC_PID=$!
+
+DOTS=""
+while kill -0 $RSYNC_PID 2>/dev/null; do
+    printf "\rYeeting%-3s" "$DOTS"
+    DOTS="${DOTS}."
+    if [ ${#DOTS} -gt 3 ]; then DOTS=""; fi
+    sleep 0.3
+done
+wait $RSYNC_PID
+RSYNC_EXIT=$?
+
+if [ $RSYNC_EXIT -ne 0 ]; then
+    printf "\rYeeting failed\n"
+    exit 1
+fi
+
+SUCCESS=true
+
+if [ "$COPY_MODE" = false ]; then
+    printf "\rYeeted to %s\n" "$DEST"
+else
+    printf "\rDone            \n"
+fi

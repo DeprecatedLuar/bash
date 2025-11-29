@@ -1,0 +1,298 @@
+#!/bin/bash
+# tranz - Universal file format converter
+
+# Configuration
+KEEP_ORIGINAL=true
+
+# Whisper transcription
+WHISPER_PYTHON="$HOME/.config/yappers-of-linux/.system/venv/bin/python"
+WHISPER_MODEL="base"
+WHISPER_DEVICE="cpu"
+WHISPER_COMPUTE="float32"
+
+# Handle flags
+while [[ "$1" == -* ]]; do
+    case "$1" in
+        -r|--replace)
+            KEEP_ORIGINAL=false
+            shift
+            ;;
+        *)
+            echo "Error: Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+# Validate arguments
+if [ -z "$1" ] || [ -z "$2" ]; then
+    echo "Usage: tranz [-r|--replace] <input_file> <output_file|.ext>"
+    echo "  -r, --replace  Remove original after conversion (default: keep)"
+    echo ""
+    echo "Examples:"
+    echo "  tranz video.mkv audio.flac       # Convert MKV to FLAC audio"
+    echo "  tranz video.mkv .mp3             # Auto-name: video.mp3"
+    echo "  tranz image.png image.jpg        # Convert image formats"
+    echo "  tranz -r old.avi new.mp4         # Convert and remove original"
+    exit 1
+fi
+
+INPUT="$1"
+OUTPUT="$2"
+
+# Validate input exists
+if [ ! -f "$INPUT" ]; then
+    echo "Error: Input file not found: $INPUT"
+    exit 1
+fi
+
+# Auto-generate output filename if only extension provided
+if [[ "$OUTPUT" == .* ]]; then
+    OUTPUT="${INPUT%.*}$OUTPUT"
+fi
+
+# Check if output already exists
+if [ -f "$OUTPUT" ]; then
+    echo "Error: Output file already exists: $OUTPUT"
+    echo "Remove it first or choose a different name"
+    exit 1
+fi
+
+# Extract extensions
+INPUT_EXT="${INPUT##*.}"
+OUTPUT_EXT="${OUTPUT##*.}"
+INPUT_EXT_LOWER=$(echo "$INPUT_EXT" | tr '[:upper:]' '[:lower:]')
+OUTPUT_EXT_LOWER=$(echo "$OUTPUT_EXT" | tr '[:upper:]' '[:lower:]')
+
+# Detect format categories
+get_format_type() {
+    local ext="$1"
+    case "$ext" in
+        mp4|mkv|avi|mov|webm|flv|wmv|m4v|mpg|mpeg)
+            echo "video"
+            ;;
+        mp3|flac|wav|aac|ogg|m4a|wma|opus)
+            echo "audio"
+            ;;
+        jpg|jpeg|png|gif|bmp|tiff|tif|webp|heic|heif)
+            echo "image"
+            ;;
+        txt|srt|json)
+            echo "text"
+            ;;
+        *)
+            echo "unknown"
+            ;;
+    esac
+}
+
+INPUT_TYPE=$(get_format_type "$INPUT_EXT_LOWER")
+OUTPUT_TYPE=$(get_format_type "$OUTPUT_EXT_LOWER")
+
+# Build conversion pair identifier
+CONVERSION="${INPUT_TYPE}→${OUTPUT_TYPE}"
+
+CONVERT_PID=""
+SUCCESS=false
+
+cleanup() {
+    if [ -n "$CONVERT_PID" ] && kill -0 $CONVERT_PID 2>/dev/null; then
+        kill $CONVERT_PID 2>/dev/null
+        wait $CONVERT_PID 2>/dev/null
+    fi
+
+    if [ "$SUCCESS" = false ] && [ -f "$OUTPUT" ]; then
+        rm -f "$OUTPUT"
+    fi
+}
+
+trap cleanup INT TERM EXIT
+
+printf "Converting"
+
+# Delegate to appropriate tool based on conversion type
+case "$CONVERSION" in
+    video→audio)
+        # Extract audio from video with appropriate codec
+        case "$OUTPUT_EXT_LOWER" in
+            flac)
+                ffmpeg -i "$INPUT" -vn -acodec flac "$OUTPUT" -y >/dev/null 2>&1 &
+                ;;
+            mp3)
+                ffmpeg -i "$INPUT" -vn -acodec libmp3lame -q:a 2 "$OUTPUT" -y >/dev/null 2>&1 &
+                ;;
+            wav)
+                ffmpeg -i "$INPUT" -vn -acodec pcm_s16le "$OUTPUT" -y >/dev/null 2>&1 &
+                ;;
+            *)
+                ffmpeg -i "$INPUT" -vn "$OUTPUT" -y >/dev/null 2>&1 &
+                ;;
+        esac
+        ;;
+
+    video→video)
+        ffmpeg -i "$INPUT" "$OUTPUT" -y >/dev/null 2>&1 &
+        ;;
+
+    audio→audio)
+        case "$OUTPUT_EXT_LOWER" in
+            flac)
+                ffmpeg -i "$INPUT" -acodec flac "$OUTPUT" -y >/dev/null 2>&1 &
+                ;;
+            mp3)
+                ffmpeg -i "$INPUT" -acodec libmp3lame -q:a 2 "$OUTPUT" -y >/dev/null 2>&1 &
+                ;;
+            wav)
+                ffmpeg -i "$INPUT" -acodec pcm_s16le "$OUTPUT" -y >/dev/null 2>&1 &
+                ;;
+            *)
+                ffmpeg -i "$INPUT" "$OUTPUT" -y >/dev/null 2>&1 &
+                ;;
+        esac
+        ;;
+
+    image→image)
+        # Delegate to imagemagick
+        if ! command -v convert >/dev/null; then
+            echo ""
+            echo "Error: ImageMagick not found. Install it with:"
+            echo "  sudo apt install imagemagick"
+            exit 1
+        fi
+
+        # Use fine-tuned quality settings for WebP conversion
+        if [ "$OUTPUT_EXT_LOWER" = "webp" ]; then
+            case "$INPUT_EXT_LOWER" in
+                heic|heif)
+                    convert "$INPUT" -quality 78 "$OUTPUT" &
+                    ;;
+                jpg|jpeg)
+                    convert "$INPUT" -quality 50 "$OUTPUT" &
+                    ;;
+                png)
+                    convert "$INPUT" -quality 76 "$OUTPUT" &
+                    ;;
+                *)
+                    convert "$INPUT" "$OUTPUT" &
+                    ;;
+            esac
+        else
+            convert "$INPUT" "$OUTPUT" &
+        fi
+        ;;
+
+    video→text|audio→text)
+        # Check if whisper Python is available
+        if [ ! -f "$WHISPER_PYTHON" ]; then
+            echo ""
+            echo "Error: Whisper Python not found at: $WHISPER_PYTHON"
+            echo "Install faster-whisper or update WHISPER_PYTHON in the script"
+            exit 1
+        fi
+
+        # Run transcription in background
+        if [ "$OUTPUT_EXT_LOWER" = "srt" ]; then
+            "$WHISPER_PYTHON" -c "
+from faster_whisper import WhisperModel
+
+def format_timestamp(seconds):
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    millis = int((seconds % 1) * 1000)
+    return f'{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}'
+
+model = WhisperModel('$WHISPER_MODEL', device='$WHISPER_DEVICE', compute_type='$WHISPER_COMPUTE')
+segments, info = model.transcribe('$INPUT', beam_size=5)
+
+with open('$OUTPUT', 'w', encoding='utf-8') as f:
+    for i, segment in enumerate(segments, 1):
+        f.write(f'{i}\n')
+        f.write(f'{format_timestamp(segment.start)} --> {format_timestamp(segment.end)}\n')
+        f.write(f'{segment.text.strip()}\n\n')
+" &
+        elif [ "$OUTPUT_EXT_LOWER" = "json" ]; then
+            "$WHISPER_PYTHON" -c "
+import json
+from faster_whisper import WhisperModel
+
+model = WhisperModel('$WHISPER_MODEL', device='$WHISPER_DEVICE', compute_type='$WHISPER_COMPUTE')
+segments, info = model.transcribe('$INPUT', beam_size=5)
+
+output = {
+    'language': info.language,
+    'duration': info.duration,
+    'segments': [
+        {
+            'id': segment.id,
+            'start': segment.start,
+            'end': segment.end,
+            'text': segment.text.strip()
+        }
+        for segment in segments
+    ]
+}
+
+with open('$OUTPUT', 'w', encoding='utf-8') as f:
+    json.dump(output, f, indent=2, ensure_ascii=False)
+" &
+        else
+            "$WHISPER_PYTHON" -c "
+from faster_whisper import WhisperModel
+
+model = WhisperModel('$WHISPER_MODEL', device='$WHISPER_DEVICE', compute_type='$WHISPER_COMPUTE')
+segments, info = model.transcribe('$INPUT', beam_size=5)
+
+with open('$OUTPUT', 'w', encoding='utf-8') as f:
+    for segment in segments:
+        f.write(segment.text.strip() + '\n')
+" &
+        fi
+        ;;
+
+    *)
+        echo ""
+        echo "Error: Unsupported conversion: $INPUT_EXT → $OUTPUT_EXT"
+        echo ""
+        echo "Supported conversions:"
+        echo "  Video → Audio: mkv/mp4/avi/webm → mp3/flac/wav/aac/ogg"
+        echo "  Video → Video: mkv/mp4/avi/mov/webm ↔ mkv/mp4/avi/mov/webm"
+        echo "  Video → Text:  mkv/mp4/avi/webm → txt/srt/json (whisper)"
+        echo "  Audio → Audio: mp3/flac/wav/aac/ogg ↔ mp3/flac/wav/aac/ogg"
+        echo "  Audio → Text:  mp3/flac/wav/aac/ogg/m4a/webm → txt/srt/json"
+        echo "  Image → Image: jpg/png/gif/bmp/webp ↔ jpg/png/gif/bmp/webp"
+        exit 1
+        ;;
+esac
+
+# Capture PID and show loading animation
+CONVERT_PID=$!
+DOTS=""
+while kill -0 $CONVERT_PID 2>/dev/null; do
+    printf "\rConverting%-3s" "$DOTS"
+    DOTS="${DOTS}."
+    if [ ${#DOTS} -gt 3 ]; then DOTS=""; fi
+    sleep 0.3
+done
+wait $CONVERT_PID
+CONVERT_EXIT=$?
+
+if [ $CONVERT_EXIT -ne 0 ]; then
+    printf "\rConversion failed\n"
+    exit 1
+fi
+
+# Verify output was created
+if [ ! -f "$OUTPUT" ]; then
+    printf "\rConversion failed - no output generated\n"
+    exit 1
+fi
+
+SUCCESS=true
+
+# Remove original if requested
+if [ "$KEEP_ORIGINAL" = false ]; then
+    rm "$INPUT"
+fi
+
+printf "\rDone          \n"

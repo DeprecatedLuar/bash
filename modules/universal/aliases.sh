@@ -14,7 +14,7 @@ alias eup='$EDITOR $BASHRC/modules/universal/paths.sh'
 alias eua='$EDITOR $BASHRC/modules/universal/aliases.sh'
 alias el='$EDITOR $BASHRC/modules/local.sh'
 
-
+alias ed='$EDITOR $BASHRC/modules/defaults/defaults.sh' 
 
 
 
@@ -31,6 +31,9 @@ else
     alias la='ls -a --color=auto'
     alias l='ls -F --color=auto'
 fi
+
+# Kitty SSH (better terminal integration)
+alias ksh='kitty +kitten ssh'
 
 # Add an "alert" alias for long running commands.  Use like so:
 #   sleep 10; alert

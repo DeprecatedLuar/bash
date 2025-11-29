@@ -1,0 +1,70 @@
+#!/bin/bash
+
+DEFAULT_HOST="nuremberg"
+
+VPS_NAME="${1:-$DEFAULT_HOST}"
+VPS_PATH="${2:-~}"
+
+SSH_USER=$(ssh -G "$VPS_NAME" 2>/dev/null | awk '/^user / {print $2}')
+if [ -z "$SSH_USER" ]; then
+    echo "Error: Could not find SSH config for '$VPS_NAME'"
+    exit 1
+fi
+
+if [[ "$VPS_PATH" == ~* ]]; then
+    VPS_PATH="/home/$SSH_USER${VPS_PATH#\~}"
+elif [[ "$VPS_PATH" != /* ]]; then
+    VPS_PATH="/home/$SSH_USER/$VPS_PATH"
+fi
+
+MOUNT_POINT="$HOME/$VPS_NAME"
+
+if [ -e "$MOUNT_POINT" ] && ! [ -d "$MOUNT_POINT" ]; then
+    echo "Error: $MOUNT_POINT exists but is not a directory"
+    exit 1
+fi
+
+if mountpoint -q "$MOUNT_POINT" 2>/dev/null; then
+    echo "$VPS_NAME already docked at $MOUNT_POINT"
+    exit 0
+fi
+
+if [ -d "$MOUNT_POINT" ] && [ "$(ls -A "$MOUNT_POINT")" ]; then
+    echo "Error: $MOUNT_POINT exists and is not empty"
+    exit 1
+fi
+
+mkdir -p "$MOUNT_POINT"
+
+if ! ssh "$VPS_NAME" "test -d '$VPS_PATH'" 2>/dev/null; then
+    VPS_PATH="/"
+fi
+
+printf "Docking %s" "$VPS_NAME"
+
+sshfs "$VPS_NAME:$VPS_PATH" "$MOUNT_POINT" \
+    -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3 \
+    -o follow_symlinks,default_permissions,auto_cache &
+
+SSHFS_PID=$!
+DOTS=""
+while kill -0 $SSHFS_PID 2>/dev/null; do
+    printf "\rDocking %s%-3s" "$VPS_NAME" "$DOTS"
+    DOTS="${DOTS}."
+    if [ ${#DOTS} -gt 3 ]; then DOTS=""; fi
+    sleep 0.3
+done
+wait $SSHFS_PID
+SSHFS_EXIT=$?
+
+if mountpoint -q "$MOUNT_POINT" && [ $SSHFS_EXIT -eq 0 ]; then
+    if [ "$VPS_PATH" = "/" ]; then
+        printf "\r%s docked at ~/%s/\n" "$VPS_NAME" "$VPS_NAME"
+    else
+        printf "\r%s docked at ~/%s%s\n" "$VPS_NAME" "$VPS_NAME" "$VPS_PATH"
+    fi
+else
+    printf "\rDocking %s failed\n" "$VPS_NAME"
+    rmdir "$MOUNT_POINT"
+    exit 1
+fi

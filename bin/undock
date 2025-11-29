@@ -1,0 +1,35 @@
+#!/bin/bash
+
+undock_single() {
+    local VPS_NAME="$1"
+    local MOUNT_POINT="$HOME/$VPS_NAME"
+
+    if mountpoint -q "$MOUNT_POINT" 2>/dev/null; then
+        fusermount -uz "$MOUNT_POINT"
+        if mountpoint -q "$MOUNT_POINT"; then
+            echo "Undocking $VPS_NAME failed"
+            return 1
+        fi
+        echo "$VPS_NAME undocked"
+    fi
+
+    if [ -d "$MOUNT_POINT" ]; then
+        if [ -z "$(ls -A "$MOUNT_POINT")" ]; then
+            rmdir "$MOUNT_POINT"
+        else
+            echo "Error: $MOUNT_POINT exists and is not empty"
+            return 1
+        fi
+    fi
+}
+
+if [ -z "$1" ]; then
+    for dir in "$HOME"/*; do
+        [ -d "$dir" ] || continue
+        if mountpoint -q "$dir" 2>/dev/null; then
+            undock_single "$(basename "$dir")"
+        fi
+    done
+else
+    undock_single "$1"
+fi

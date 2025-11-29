@@ -1,0 +1,311 @@
+#!/bin/bash
+
+SESSION="hotline"
+INPUT_SCRIPT="${ROFI_INPUT_SCRIPT:-$HOME/.config/dots/config/rofi/applets/input-text/input-text.sh}"
+HOTLINE_HISTORY="/tmp/hotline_history"
+
+auto_clean() {
+    tmux has-session -t "$SESSION" 2>/dev/null || return
+
+    while read -r pane_id pane_dead pane_title; do
+        if [[ "$pane_dead" == "1" ]]; then
+            # Capture output and notify unless muted or held (user was watching it)
+            if [[ "$pane_title" != mute:* ]] && [[ "$pane_title" != hold:* ]] && command -v notify-send &>/dev/null; then
+                # Read output from temp file
+                local output_file="/tmp/hotline_${pane_id//[^a-zA-Z0-9]/_}"
+                if [[ -f "$output_file" ]]; then
+                    output=$(cat "$output_file" 2>/dev/null)
+
+                    # Strip ANSI codes and handle carriage returns
+                    clean_output=$(echo "$output" | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' | sed 's/.*\r\([^\r]*\)$/\1/' | sed '/^$/d')
+
+                    # Limit output length
+                    lines=$(echo "$clean_output" | wc -l)
+                    if [ $lines -le 15 ] && [ $lines -gt 0 ]; then
+                        notify_body="$clean_output"
+                    elif [ $lines -gt 15 ]; then
+                        notify_body=$(echo "$clean_output" | head -10)
+                        notify_body+=$'\n...'
+                        notify_body+=$'\n'"($((lines - 10)) more lines)"
+                    else
+                        notify_body="(no output)"
+                    fi
+
+                    notify-send "☎ Hotline" "$notify_body"
+
+                    # Clean up temp file
+                    rm -f "$output_file"
+                fi
+            fi
+
+            tmux kill-pane -t "$pane_id" 2>/dev/null
+        fi
+    done < <(tmux list-panes -s -t "$SESSION" -F "#{pane_id} #{pane_dead} #{pane_title}" 2>/dev/null)
+}
+
+cmd_exec() {
+    local command="$1"
+    [[ -z "$command" ]] && exit 1
+
+    # Check for prefixes
+    local hold_mode=false
+    local mute_mode=false
+
+    if [[ "$command" == hold\ * ]]; then
+        hold_mode=true
+        command="${command#hold }"
+    fi
+
+    if [[ "$command" == mute\ * ]]; then
+        mute_mode=true
+        command="${command#mute }"
+    fi
+
+    if [[ "$command" == dial\ * ]]; then
+        command="${command#dial }"
+
+        # Get input via rofi
+        local user_input=$("$INPUT_SCRIPT" normal "Input: ")
+        [[ -z "$user_input" ]] && return
+
+        # Escape input for safe inclusion in command
+        local escaped_input="${user_input//\\/\\\\}"
+        escaped_input="${escaped_input//\"/\\\"}"
+        escaped_input="${escaped_input//\$/\\\$}"
+        escaped_input="${escaped_input//\`/\\\`}"
+
+        # Pipe input to command
+        command="echo \"$escaped_input\" | $command"
+    fi
+
+    if [[ "$command" == sudo\ * ]]; then
+        command="${command#sudo }"
+
+        # Prompt for password via rofi
+        local password=$("$INPUT_SCRIPT" password "Password: ")
+        [[ -z "$password" ]] && return
+
+        # Validate password
+        if ! echo "$password" | sudo -S -v 2>/dev/null; then
+            notify-send "☎ Hotline" "Authentication failed"
+            return
+        fi
+
+        # Escape password for safe inclusion in command
+        local escaped_password="${password//\\/\\\\}"
+        escaped_password="${escaped_password//\"/\\\"}"
+        escaped_password="${escaped_password//\$/\\\$}"
+        escaped_password="${escaped_password//\`/\\\`}"
+
+        # Pipe password to sudo -S in the command (with empty password prompt)
+        command="echo \"$escaped_password\" | sudo -S -p '' $command"
+    fi
+
+    tmux has-session -t "$SESSION" 2>/dev/null || \
+        tmux new-session -d -s "$SESSION"
+
+    auto_clean
+
+    # Create interactive pane (loads .bashrc automatically)
+    if tmux list-panes -s -t "$SESSION" 2>/dev/null | grep -q .; then
+        tmux split-window -t "$SESSION" 2>/dev/null && \
+            tmux select-layout -t "$SESSION" tiled 2>/dev/null || \
+            tmux new-window -t "$SESSION"
+    fi
+
+    # Get the target pane
+    local target_pane=$(tmux list-panes -t "$SESSION" -F "#{pane_id}" | tail -1)
+
+    # Set pane title based on mode (for auto_clean to know whether to notify)
+    if $mute_mode; then
+        tmux select-pane -t "$target_pane" -T "mute:$command"
+    elif $hold_mode; then
+        tmux select-pane -t "$target_pane" -T "hold:$command"
+    else
+        tmux select-pane -t "$target_pane" -T "$command"
+    fi
+
+    # Build final command with output capture for notifications
+    local final_cmd
+    local output_file="/tmp/hotline_${target_pane//[^a-zA-Z0-9]/_}"
+
+    if $hold_mode; then
+        # Hold mode: wait for Enter, then exit
+        final_cmd="$command; echo; read -p 'Press Enter to close...'; exit"
+        tmux send-keys -t "$target_pane" "$final_cmd" Enter
+    elif $mute_mode; then
+        # Mute mode: just run and exit, no notification
+        final_cmd="$command; exit"
+        tmux send-keys -t "$target_pane" "$final_cmd" Enter
+    else
+        # Normal mode: capture output, wait for exit, notify, clean
+        final_cmd="$command 2>&1 | tee '$output_file'; exit"
+        tmux send-keys -t "$target_pane" "$final_cmd" Enter
+
+        # WAIT for pane to exit
+        while tmux list-panes -t "$SESSION" -F "#{pane_id}" 2>/dev/null | grep -q "^${target_pane}$"; do
+            sleep 0.1
+        done
+
+        # COPY content from temp file
+        if [[ -f "$output_file" ]] && command -v notify-send &>/dev/null; then
+            output=$(cat "$output_file" 2>/dev/null)
+
+            # Strip ANSI codes and clean up (aggressive filtering)
+            clean_output=$(echo "$output" | \
+                sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' | \
+                sed 's/\x1b\][^\x07]*\x07//g' | \
+                sed 's/\x1b[>\()\[]//g' | \
+                tr -cd '\11\12\15\40-\176' | \
+                sed 's/.*\r\([^\r]*\)$/\1/' | \
+                sed '/^$/d')
+
+            # Limit output length
+            lines=$(echo "$clean_output" | wc -l)
+            if [ $lines -le 15 ] && [ $lines -gt 0 ]; then
+                notify_body="$clean_output"
+            elif [ $lines -gt 15 ]; then
+                notify_body=$(echo "$clean_output" | head -10)
+                notify_body+=$'\n...\n'"($((lines - 10)) more lines)"
+            else
+                notify_body="Command completed"
+            fi
+
+            # GENERATE notification
+            notify-send "☎ Hotline" "$notify_body"
+
+            # Clean up temp file
+            rm -f "$output_file"
+        fi
+    fi
+}
+
+cmd_show() {
+    tmux has-session -t "$SESSION" 2>/dev/null || \
+        tmux new-session -d -s "$SESSION"
+
+    local term="${TERMINAL:-kitty}"
+    command -v "$term" &>/dev/null || term="alacritty"
+    command -v "$term" &>/dev/null || term="gnome-terminal"
+    command -v "$term" &>/dev/null || term="xterm"
+
+    "$term" -e tmux attach -t "$SESSION" &
+}
+
+cmd_list() {
+    if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+        echo "No active session"
+        return
+    fi
+    tmux list-panes -s -t "$SESSION" -F "#{pane_index}: [#{pane_current_command}] #{pane_dead}"
+}
+
+resolve_history() {
+    local input="$1"
+
+    # If doesn't start with !, return as-is
+    [[ "$input" != !* ]] && echo "$input" && return
+
+    # Handle !! (last command)
+    if [[ "$input" == "!!" ]]; then
+        [[ ! -f "$HOTLINE_HISTORY" ]] && echo "$input" && return
+        local last_cmd=$(tail -1 "$HOTLINE_HISTORY" 2>/dev/null)
+        [[ -z "$last_cmd" ]] && echo "$input" && return
+        echo "$last_cmd"
+        return
+    fi
+
+    # Handle !! with suffix (like !! | grep foo)
+    if [[ "$input" == "!!"* ]]; then
+        [[ ! -f "$HOTLINE_HISTORY" ]] && echo "$input" && return
+        local last_cmd=$(tail -1 "$HOTLINE_HISTORY" 2>/dev/null)
+        [[ -z "$last_cmd" ]] && echo "$input" && return
+        echo "${input/!!\*/$last_cmd}"
+        return
+    fi
+
+    # Handle !-n (n commands back)
+    if [[ "$input" =~ ^!-([0-9]+)(.*) ]]; then
+        local n="${BASH_REMATCH[1]}"
+        local rest="${BASH_REMATCH[2]}"
+        [[ ! -f "$HOTLINE_HISTORY" ]] && echo "$input" && return
+        local cmd=$(tail -"$n" "$HOTLINE_HISTORY" 2>/dev/null | head -1)
+        [[ -z "$cmd" ]] && echo "$input" && return
+        echo "${cmd}${rest}"
+        return
+    fi
+
+    # If we can't resolve it, return original
+    echo "$input"
+}
+
+save_to_history() {
+    local cmd="$1"
+    # Don't save history expansions themselves or special keywords
+    [[ "$cmd" == "!!"* ]] && return
+    [[ "$cmd" == "pickup" ]] && return
+    [[ "$cmd" == "list" ]] && return
+
+    echo "$cmd" >> "$HOTLINE_HISTORY"
+}
+
+cmd_input() {
+    if ! command -v rofi &>/dev/null; then
+        echo "rofi not found" >&2
+        exit 1
+    fi
+
+    local input
+    input=$("$INPUT_SCRIPT" normal "")
+
+    [[ -z "$input" ]] && exit 0
+
+    # Resolve history expansion
+    local resolved_input=$(resolve_history "$input")
+
+    case "$resolved_input" in
+        pickup) cmd_show ;;
+        list)   cmd_list ;;
+        *)
+            save_to_history "$resolved_input"
+            cmd_exec "$resolved_input"
+            ;;
+    esac
+}
+
+case "$1" in
+    list) cmd_list ;;
+    "")   cmd_input ;;
+    *)
+        cat >&2 <<EOF
+Usage: hotline [command]
+
+Commands:
+    (none)        Open rofi to fire commands (default)
+    list          List running commands
+
+Rofi keywords:
+    pickup        Attach to tmux session (view all splits)
+    list          Show running commands
+    <anything>    Execute command in split pane
+
+Prefixes:
+    hold <cmd>    Keep pane open after command (no notification)
+    mute <cmd>    No notification (silent execution)
+    dial <cmd>    Prompt for input via rofi, pipe to command
+    sudo <cmd>    Run with password prompt (rofi)
+
+Examples:
+    hotline                  # Open rofi
+    hotline list             # See what's running
+
+    (in rofi) vibecheck      # Run and get notification
+    (in rofi) hold cmatrix   # Run and keep pane open
+    (in rofi) mute ls        # Run silently (no notification)
+    (in rofi) dial echo      # Prompt for input, pipe to echo
+    (in rofi) sudo apt update  # Prompt for password, run with sudo
+    (in rofi) pickup         # View all panes
+EOF
+        exit 1
+        ;;
+esac

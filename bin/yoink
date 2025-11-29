@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+COPY_MODE=false
+
+if [[ $# -lt 2 ]]; then
+    echo "Usage: yoink [-c|--copy] <filename|pattern> <ssh-host>"
+    echo "Example: yoink myfile.txt parxloid-nuremberg"
+    echo "         yoink G-Crack* parxloid-nuremberg"
+    echo "         yoink ~/backups/data.sql parxloid-nuremberg"
+    echo ""
+    echo "Options:"
+    echo "  -c, --copy    Copy file instead of moving (keeps source on remote)"
+    echo ""
+    echo "Searches ~/Workspace/shared/ first, then ~/ as fallback"
+    echo "Supports wildcards for pattern matching"
+    echo "By default, source file is DELETED from remote after transfer"
+    exit 1
+fi
+
+if [[ "$1" == "--copy" || "$1" == "-c" ]]; then
+    COPY_MODE=true
+    shift
+fi
+
+SOURCE_PATH="$1"
+HOST="$2"
+ORIGINAL_DIR=$(pwd)
+
+if [[ "$SOURCE_PATH" == /* ]] || [[ "$SOURCE_PATH" == ~* ]]; then
+    SEARCH_PATHS=("$SOURCE_PATH")
+else
+    SEARCH_PATHS=("~/Workspace/shared/$SOURCE_PATH" "~/$SOURCE_PATH")
+fi
+
+TEMP_DIR=$(mktemp -d)
+RSYNC_SUCCESS=false
+FOUND_PATH=""
+RSYNC_PID=""
+
+cleanup() {
+    if [ -n "$RSYNC_PID" ] && kill -0 $RSYNC_PID 2>/dev/null; then
+        kill $RSYNC_PID 2>/dev/null
+        wait $RSYNC_PID 2>/dev/null
+    fi
+
+    if [ -n "$TEMP_DIR" ] && [ -d "$TEMP_DIR" ]; then
+        rm -rf "$TEMP_DIR"
+    fi
+}
+
+trap cleanup INT TERM EXIT
+
+RSYNC_FLAGS="-az"
+if [ "$COPY_MODE" = false ]; then
+    RSYNC_FLAGS="-az --remove-source-files"
+fi
+
+for REMOTE_PATH in "${SEARCH_PATHS[@]}"; do
+    printf "Yoinking"
+
+    rsync $RSYNC_FLAGS "${HOST}:${REMOTE_PATH}" "$TEMP_DIR/" 2>/dev/null &
+    RSYNC_PID=$!
+
+    DOTS=""
+    while kill -0 $RSYNC_PID 2>/dev/null; do
+        printf "\rYoinking%-3s" "$DOTS"
+        DOTS="${DOTS}."
+        if [ ${#DOTS} -gt 3 ]; then DOTS=""; fi
+        sleep 0.3
+    done
+    wait $RSYNC_PID
+    RSYNC_EXIT=$?
+
+    if [ $RSYNC_EXIT -eq 0 ]; then
+        RSYNC_SUCCESS=true
+        FOUND_PATH="$REMOTE_PATH"
+        break
+    else
+        printf "\r%-20s\r" ""
+    fi
+done
+
+if [ "$RSYNC_SUCCESS" = false ]; then
+    printf "Yoinking failed - pattern not found in searched locations\n"
+    exit 1
+fi
+
+mv "$TEMP_DIR"/* "$ORIGINAL_DIR/" 2>/dev/null
+
+if [ "$COPY_MODE" = false ]; then
+    printf "\rYoinked from %s:%s\n" "$HOST" "$FOUND_PATH"
+else
+    printf "\rDone            \n"
+fi

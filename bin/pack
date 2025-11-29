@@ -1,0 +1,114 @@
+#!/bin/bash
+# pack - Universal archive creator
+
+FORMAT="tar.gz"
+KEEP_ORIGINAL=false
+TARGET=""
+
+for arg in "$@"; do
+  case "$arg" in
+    -c|--copy)
+      KEEP_ORIGINAL=true
+      ;;
+    --zip)
+      FORMAT="zip"
+      ;;
+    -*)
+      echo "Error: Unknown option: $arg"
+      exit 1
+      ;;
+    *)
+      if [ -z "$TARGET" ]; then
+        TARGET="$arg"
+      else
+        echo "Error: Multiple targets specified"
+        exit 1
+      fi
+      ;;
+  esac
+done
+
+if [ -z "$TARGET" ]; then
+  echo "Usage: pack [-c|--copy] [--zip] <file_or_folder>"
+  echo "  -c, --copy    Keep original file/folder (default: remove)"
+  echo "  --zip         Create zip archive (default: tar.gz)"
+  exit 1
+fi
+
+if [ ! -e "$TARGET" ]; then
+  echo "Error: File or folder not found: $TARGET"
+  exit 1
+fi
+BASENAME=$(basename "$TARGET")
+ORIGINAL_DIR=$(pwd)
+
+case "$FORMAT" in
+  tar.gz)
+    OUTPUT="${BASENAME}.tar.gz"
+    ;;
+  zip)
+    OUTPUT="${BASENAME}.zip"
+    ;;
+  *)
+    echo "Error: Unknown format: $FORMAT"
+    exit 1
+    ;;
+esac
+
+TEMP_DIR=""
+TEMP_TARGET=""
+PACK_PID=""
+SUCCESS=false
+
+cleanup() {
+    if [ -n "$PACK_PID" ] && kill -0 $PACK_PID 2>/dev/null; then
+        kill $PACK_PID 2>/dev/null
+        wait $PACK_PID 2>/dev/null
+    fi
+
+    if [ "$KEEP_ORIGINAL" = false ] && [ -n "$TEMP_DIR" ] && [ -d "$TEMP_DIR" ]; then
+        if [ "$SUCCESS" = false ] && [ -e "$TEMP_TARGET" ]; then
+            mv "$TEMP_TARGET" "$ORIGINAL_DIR/" 2>/dev/null
+        fi
+        rm -rf "$TEMP_DIR"
+    fi
+}
+
+trap cleanup INT TERM EXIT
+
+if [ "$KEEP_ORIGINAL" = false ]; then
+    TEMP_DIR=$(mktemp -d)
+    TEMP_TARGET="$TEMP_DIR/$BASENAME"
+    mv "$TARGET" "$TEMP_TARGET"
+    TARGET="$TEMP_TARGET"
+fi
+
+printf "Packing"
+
+case "$FORMAT" in
+  tar.gz)
+    tar czf "$ORIGINAL_DIR/$OUTPUT" -C "$(dirname "$TARGET")" "$(basename "$TARGET")" &
+    ;;
+  zip)
+    (cd "$(dirname "$TARGET")" && zip -rq "$ORIGINAL_DIR/$OUTPUT" "$(basename "$TARGET")") &
+    ;;
+esac
+
+PACK_PID=$!
+DOTS=""
+while kill -0 $PACK_PID 2>/dev/null; do
+    printf "\rPacking%-3s" "$DOTS"
+    DOTS="${DOTS}."
+    if [ ${#DOTS} -gt 3 ]; then DOTS=""; fi
+    sleep 0.3
+done
+wait $PACK_PID
+PACK_EXIT=$?
+
+if [ $PACK_EXIT -ne 0 ]; then
+    printf "\rPacking failed\n"
+    exit 1
+fi
+
+SUCCESS=true
+printf "\rDone        \n"

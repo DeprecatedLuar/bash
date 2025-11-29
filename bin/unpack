@@ -1,0 +1,171 @@
+#!/bin/bash
+# unpack - Universal archive extractor
+
+KEEP_ORIGINAL=false
+
+if [ "$1" = "-c" ]; then
+  KEEP_ORIGINAL=true
+  shift
+fi
+
+if [ -z "$1" ]; then
+  echo "Usage: unpack [-c] <archive_file>"
+  echo "  -c  Keep original archive file (copy mode)"
+  exit 1
+fi
+
+if [ ! -f "$1" ]; then
+  echo "Error: File not found: $1"
+  exit 1
+fi
+
+ARCHIVE="$1"
+ARCHIVE_NAME=$(basename "$ARCHIVE")
+ORIGINAL_DIR=$(pwd)
+
+case "$ARCHIVE_NAME" in
+  *.tar.gz) BASE_NAME="${ARCHIVE_NAME%.tar.gz}" ;;
+  *.tgz) BASE_NAME="${ARCHIVE_NAME%.tgz}" ;;
+  *.tar.bz2) BASE_NAME="${ARCHIVE_NAME%.tar.bz2}" ;;
+  *.tbz2) BASE_NAME="${ARCHIVE_NAME%.tbz2}" ;;
+  *.tar.xz) BASE_NAME="${ARCHIVE_NAME%.tar.xz}" ;;
+  *.txz) BASE_NAME="${ARCHIVE_NAME%.txz}" ;;
+  *.tar) BASE_NAME="${ARCHIVE_NAME%.tar}" ;;
+  *.zip) BASE_NAME="${ARCHIVE_NAME%.zip}" ;;
+  *.7z) BASE_NAME="${ARCHIVE_NAME%.7z}" ;;
+  *.rar) BASE_NAME="${ARCHIVE_NAME%.rar}" ;;
+  *.gz) BASE_NAME="${ARCHIVE_NAME%.gz}" ;;
+  *.bz2) BASE_NAME="${ARCHIVE_NAME%.bz2}" ;;
+  *) BASE_NAME="${ARCHIVE_NAME}" ;;
+esac
+
+TEMP_ARCHIVE_DIR=""
+TEMP_EXTRACT_DIR=$(mktemp -d)
+TEMP_ARCHIVE=""
+UNPACK_PID=""
+SUCCESS=false
+DEST_FOLDER=""
+DEST_CREATED=false
+
+cleanup() {
+    if [ -n "$UNPACK_PID" ] && kill -0 $UNPACK_PID 2>/dev/null; then
+        kill $UNPACK_PID 2>/dev/null
+        wait $UNPACK_PID 2>/dev/null
+    fi
+
+    if [ "$SUCCESS" = false ]; then
+        if [ "$DEST_CREATED" = true ] && [ -n "$DEST_FOLDER" ] && [ -d "$DEST_FOLDER" ]; then
+            rm -rf "$DEST_FOLDER"
+        fi
+
+        if [ "$KEEP_ORIGINAL" = false ] && [ -n "$TEMP_ARCHIVE" ] && [ -e "$TEMP_ARCHIVE" ]; then
+            mv "$TEMP_ARCHIVE" "$ORIGINAL_DIR/" 2>/dev/null
+        fi
+    fi
+
+    if [ -n "$TEMP_ARCHIVE_DIR" ] && [ -d "$TEMP_ARCHIVE_DIR" ]; then
+        rm -rf "$TEMP_ARCHIVE_DIR"
+    fi
+
+    if [ -n "$TEMP_EXTRACT_DIR" ] && [ -d "$TEMP_EXTRACT_DIR" ]; then
+        rm -rf "$TEMP_EXTRACT_DIR"
+    fi
+}
+
+trap cleanup INT TERM EXIT
+
+if [ "$KEEP_ORIGINAL" = false ]; then
+    TEMP_ARCHIVE_DIR=$(mktemp -d)
+    TEMP_ARCHIVE="$TEMP_ARCHIVE_DIR/$ARCHIVE_NAME"
+    mv "$ARCHIVE" "$TEMP_ARCHIVE"
+    ARCHIVE="$TEMP_ARCHIVE"
+
+    DEST_FOLDER="$ORIGINAL_DIR/$BASE_NAME"
+    if [ ! -e "$DEST_FOLDER" ]; then
+        mkdir -p "$DEST_FOLDER"
+        DEST_CREATED=true
+    fi
+fi
+
+printf "Unpacking"
+
+case "$ARCHIVE" in
+  *.tar.gz|*.tgz)
+    tar xzf "$ARCHIVE" -C "$TEMP_EXTRACT_DIR" &
+    ;;
+  *.tar.bz2|*.tbz2)
+    tar xjf "$ARCHIVE" -C "$TEMP_EXTRACT_DIR" &
+    ;;
+  *.tar.xz|*.txz)
+    tar xJf "$ARCHIVE" -C "$TEMP_EXTRACT_DIR" &
+    ;;
+  *.tar)
+    tar xf "$ARCHIVE" -C "$TEMP_EXTRACT_DIR" &
+    ;;
+  *.zip)
+    unzip -q "$ARCHIVE" -d "$TEMP_EXTRACT_DIR" &
+    ;;
+  *.7z)
+    7z x -bd -o"$TEMP_EXTRACT_DIR" "$ARCHIVE" > /dev/null &
+    ;;
+  *.rar)
+    unrar x -inul "$ARCHIVE" "$TEMP_EXTRACT_DIR/" &
+    ;;
+  *.gz)
+    if [ "$KEEP_ORIGINAL" = true ]; then
+      gunzip -k -c "$ARCHIVE" > "$TEMP_EXTRACT_DIR/${ARCHIVE_NAME%.gz}" &
+    else
+      gunzip -c "$ARCHIVE" > "$TEMP_EXTRACT_DIR/${ARCHIVE_NAME%.gz}" &
+    fi
+    ;;
+  *.bz2)
+    if [ "$KEEP_ORIGINAL" = true ]; then
+      bunzip2 -k -c "$ARCHIVE" > "$TEMP_EXTRACT_DIR/${ARCHIVE_NAME%.bz2}" &
+    else
+      bunzip2 -c "$ARCHIVE" > "$TEMP_EXTRACT_DIR/${ARCHIVE_NAME%.bz2}" &
+    fi
+    ;;
+  *)
+    echo "Error: Unknown archive format: $ARCHIVE"
+    echo "Supported formats: .tar.gz, .tar.bz2, .tar.xz, .tar, .zip, .7z, .rar, .gz, .bz2"
+    exit 1
+    ;;
+esac
+
+UNPACK_PID=$!
+DOTS=""
+while kill -0 $UNPACK_PID 2>/dev/null; do
+    printf "\rUnpacking%-3s" "$DOTS"
+    DOTS="${DOTS}."
+    if [ ${#DOTS} -gt 3 ]; then DOTS=""; fi
+    sleep 0.3
+done
+wait $UNPACK_PID
+UNPACK_EXIT=$?
+
+if [ $UNPACK_EXIT -ne 0 ]; then
+    printf "\rUnpacking failed\n"
+    exit 1
+fi
+
+if [ "$DEST_CREATED" = true ]; then
+    shopt -s dotglob nullglob
+    EXTRACTED_ITEMS=("$TEMP_EXTRACT_DIR"/*)
+    shopt -u dotglob nullglob
+
+    if [ ${#EXTRACTED_ITEMS[@]} -eq 1 ] && [ -d "${EXTRACTED_ITEMS[0]}" ]; then
+        mv "${EXTRACTED_ITEMS[0]}"/* "$DEST_FOLDER/" 2>/dev/null
+        [ -d "${EXTRACTED_ITEMS[0]}" ] && rmdir "${EXTRACTED_ITEMS[0]}" 2>/dev/null
+    else
+        mv "$TEMP_EXTRACT_DIR"/* "$DEST_FOLDER/" 2>/dev/null
+    fi
+else
+    mv "$TEMP_EXTRACT_DIR"/* "$ORIGINAL_DIR/" 2>/dev/null || {
+        shopt -s dotglob
+        mv "$TEMP_EXTRACT_DIR"/* "$ORIGINAL_DIR/" 2>/dev/null
+        shopt -u dotglob
+    }
+fi
+
+SUCCESS=true
+printf "\rDone          \n"
