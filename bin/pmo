@@ -4,10 +4,27 @@
 PMO_LIB="$HOME/.config/bash/bin/lib/pmo"
 FB_BLANK="/sys/class/graphics/fb0/blank"
 
+start_target() {
+    case "$1" in
+        kb) setsid buffyboard >/dev/null 2>&1 & ;;
+        *)  echo "Unknown target: $1" && return 1 ;;
+    esac
+}
+
+stop_target() {
+    case "$1" in
+        kb) pkill -x buffyboard 2>/dev/null ;;
+        *)  echo "Unknown target: $1" && return 1 ;;
+    esac
+}
+
 case "$1" in
     wake)   echo 0 > "$FB_BLANK" ;;
     sleep)  echo 1 > "$FB_BLANK" ;;
     status) [ "$(cat "$FB_BLANK")" = "0" ] && echo "awake" || echo "sleeping" ;;
+    kb)     stop_target kb; start_target kb ;;
+    start)  start_target "$2" ;;
+    stop)   stop_target "$2" ;;
     setup)  "$PMO_LIB/setup.sh" ;;
-    *)      echo "Usage: pmo {wake|sleep|status|setup}" && exit 1 ;;
+    *)      echo "Usage: pmo {wake|sleep|status|kb|start|stop|setup}" && exit 1 ;;
 esac
