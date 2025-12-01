@@ -16,7 +16,7 @@ case "${1:-}" in
         port="${1#:}"
         "$LIB_DIR/get-port-process.sh" "$port"
         ;;
-    cpu|ram|gpu|fan)
+    cpu|ram|gpu|fan|bat)
         "$LIB_DIR/get-system-metrics.sh" "$@"
         ;;
     "")

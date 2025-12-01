@@ -1,7 +1,7 @@
 #!/bin/bash
 
 metrics=("$@")
-[[ ${#metrics[@]} -eq 0 ]] && metrics=(cpu ram gpu fan)
+[[ ${#metrics[@]} -eq 0 ]] && metrics=(cpu ram gpu fan bat)
 
 for metric in "${metrics[@]}"; do
     case "$metric" in
@@ -39,6 +39,14 @@ for metric in "${metrics[@]}"; do
             sensors | awk '/^fan[0-9]+:/ && /RPM/ {
                 match($0, /[[:space:]]+([0-9]+) RPM/, a); sum+=a[1]; count++
             } END {if(count>0) printf "FAN %.0frpm\n", sum/count}'
+            ;;
+        bat)
+            for psu in /sys/class/power_supply/*; do
+                [[ "$(cat "$psu/type" 2>/dev/null)" == "Battery" ]] || continue
+                capacity=$(cat "$psu/capacity" 2>/dev/null)
+                status=$(cat "$psu/status" 2>/dev/null)
+                [[ -n "$capacity" ]] && printf "BAT %s%% (%s)\n" "$capacity" "$status"
+            done
             ;;
     esac
 done
