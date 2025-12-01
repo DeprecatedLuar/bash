@@ -2,7 +2,6 @@
 # Setup script for pmo - configures permissions for non-root access
 
 UDEV_RULE="/etc/udev/rules.d/90-pmo.rules"
-DOAS_RULE="/etc/doas.d/pmo.conf"
 
 # Install buffyboard if missing
 if ! command -v buffyboard >/dev/null 2>&1; then
@@ -10,17 +9,22 @@ if ! command -v buffyboard >/dev/null 2>&1; then
     doas apk add buffyboard
 fi
 
-# Udev rules for display control
+# Add user to required groups for device access
+echo "Adding $USER to input and tty groups..."
+doas adduser "$USER" input 2>/dev/null
+doas adduser "$USER" tty 2>/dev/null
+
+# Udev rules for device access
 echo "Creating udev rules..."
 doas tee "$UDEV_RULE" > /dev/null << 'EOF'
+# Display control
 SUBSYSTEM=="graphics", KERNEL=="fb0", RUN+="/bin/chgrp video /sys%p/blank", RUN+="/bin/chmod g+w /sys%p/blank"
 SUBSYSTEM=="backlight", RUN+="/bin/chgrp video /sys%p/brightness", RUN+="/bin/chmod g+w /sys%p/brightness"
+# Buffyboard - input devices
+KERNEL=="uinput", GROUP="input", MODE="0660"
+KERNEL=="tty0", GROUP="tty", MODE="0660"
 EOF
 doas udevadm control --reload-rules
 doas udevadm trigger
 
-# Doas rules for passwordless access
-echo "Creating doas rules..."
-doas sh -c "echo 'permit nopass :wheel cmd buffyboard' > '$DOAS_RULE' && chmod 600 '$DOAS_RULE'"
-
-echo "Done. Reboot or run: doas chmod g+w /sys/class/graphics/fb0/blank"
+echo "Done. Reboot for group changes to take effect."
