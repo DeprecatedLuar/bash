@@ -11,10 +11,7 @@ for metric in "${metrics[@]}"; do
                 /^CPU:/ {gsub(/%/,"",$2); cpu=$2}
                 END {if(cpu) printf "%.0f", cpu}
             ')
-            temp=$(sensors 2>/dev/null | awk '
-                /^(Package id 0|Core 0):/ && /\+[0-9.]+°C/ {match($0, /\+([0-9.]+)/, a); print a[1]; exit}
-                /^temp1:/ && /\+[0-9.]+°C/ {match($0, /\+([0-9.]+)/, a); print a[1]; exit}
-            ')
+            temp=$(sensors 2>/dev/null | grep -E '^(Package id 0|Core 0|temp1):' | head -1 | sed 's/.*+\([0-9.]*\).*/\1/')
             if [[ -n "$usage" ]]; then
                 if [[ -n "$temp" ]]; then
                     printf "CPU %s%% (%.0f°C)\n" "$usage" "$temp"

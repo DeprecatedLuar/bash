@@ -200,6 +200,17 @@ cmd_list() {
     tmux list-panes -s -t "$SESSION" -F "#{pane_index}: [#{pane_current_command}] #{pane_dead}"
 }
 
+cmd_yellowpage() {
+    if [[ ! -f "$HOTLINE_HISTORY" ]]; then
+        echo "No history"
+        command -v notify-send &>/dev/null && notify-send "☎ Hotline" "No history"
+        return
+    fi
+    local history=$(tail -10 "$HOTLINE_HISTORY")
+    echo "$history"
+    command -v notify-send &>/dev/null && notify-send "☎ Hotline" "$history"
+}
+
 resolve_history() {
     local input="$1"
 
@@ -245,6 +256,7 @@ save_to_history() {
     [[ "$cmd" == "!!"* ]] && return
     [[ "$cmd" == "pickup" ]] && return
     [[ "$cmd" == "list" ]] && return
+    [[ "$cmd" == "yellowpage" || "$cmd" == "ylpg" ]] && return
 
     echo "$cmd" >> "$HOTLINE_HISTORY"
 }
@@ -266,6 +278,7 @@ cmd_input() {
     case "$resolved_input" in
         pickup) cmd_show ;;
         list)   cmd_list ;;
+        yellowpage|ylpg) cmd_yellowpage ;;
         *)
             save_to_history "$resolved_input"
             cmd_exec "$resolved_input"
@@ -275,6 +288,7 @@ cmd_input() {
 
 case "$1" in
     list) cmd_list ;;
+    yellowpage|ylpg) cmd_yellowpage ;;
     "")   cmd_input ;;
     *)
         cat >&2 <<EOF
@@ -283,10 +297,12 @@ Usage: hotline [command]
 Commands:
     (none)        Open rofi to fire commands (default)
     list          List running commands
+    yellowpage    Show last 10 commands (alias: ylpg)
 
 Rofi keywords:
     pickup        Attach to tmux session (view all splits)
     list          Show running commands
+    yellowpage    Show last 10 commands (alias: ylpg)
     <anything>    Execute command in split pane
 
 Prefixes:
