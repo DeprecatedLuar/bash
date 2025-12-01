@@ -6,11 +6,22 @@ metrics=("$@")
 for metric in "${metrics[@]}"; do
     case "$metric" in
         cpu)
-            usage=$(top -bn2 -d1 | awk '/^%Cpu/ {cpu=$2} END {printf "%.0f", cpu}')
-            temp=$(sensors | awk '/^(Package id 0|Core 0):/ && /\+[0-9.]+°C/ {
-                match($0, /\+([0-9.]+)/, a); print a[1]; exit
-            }')
-            [[ -n "$usage" && -n "$temp" ]] && printf "CPU %s%% (%.0f°C)\n" "$usage" "$temp"
+            usage=$(top -bn2 -d1 | awk '
+                /^%Cpu/ {cpu=$2}
+                /^CPU:/ {gsub(/%/,"",$2); cpu=$2}
+                END {if(cpu) printf "%.0f", cpu}
+            ')
+            temp=$(sensors 2>/dev/null | awk '
+                /^(Package id 0|Core 0):/ && /\+[0-9.]+°C/ {match($0, /\+([0-9.]+)/, a); print a[1]; exit}
+                /^temp1:/ && /\+[0-9.]+°C/ {match($0, /\+([0-9.]+)/, a); print a[1]; exit}
+            ')
+            if [[ -n "$usage" ]]; then
+                if [[ -n "$temp" ]]; then
+                    printf "CPU %s%% (%.0f°C)\n" "$usage" "$temp"
+                else
+                    printf "CPU %s%%\n" "$usage"
+                fi
+            fi
             ;;
         ram)
             if [[ ${#metrics[@]} -eq 1 ]]; then
