@@ -21,9 +21,6 @@ doas udevadm trigger
 
 # Doas rules for passwordless access
 echo "Creating doas rules..."
-doas tee "$DOAS_RULE" > /dev/null << 'EOF'
-permit nopass :wheel cmd buffyboard
-EOF
-doas chmod 600 "$DOAS_RULE"
+doas sh -c "echo 'permit nopass :wheel cmd buffyboard' > '$DOAS_RULE' && chmod 600 '$DOAS_RULE'"
 
 echo "Done. Reboot or run: doas chmod g+w /sys/class/graphics/fb0/blank"
