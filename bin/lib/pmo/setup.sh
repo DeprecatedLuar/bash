@@ -24,5 +24,6 @@ echo "Creating doas rules..."
 doas tee "$DOAS_RULE" > /dev/null << 'EOF'
 permit nopass :wheel cmd buffyboard
 EOF
+doas chmod 600 "$DOAS_RULE"
 
 echo "Done. Reboot or run: doas chmod g+w /sys/class/graphics/fb0/blank"
