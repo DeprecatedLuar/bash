@@ -1,5 +1,7 @@
 #!/bin/bash
 
+[[ ! -L ~/bin/vch ]] && ln -sf vibecheck ~/bin/vch
+
 LIB_DIR="$(dirname "$0")/lib"
 
 case "${1:-}" in
