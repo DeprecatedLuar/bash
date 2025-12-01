@@ -6,7 +6,7 @@ FB_BLANK="/sys/class/graphics/fb0/blank"
 
 start_target() {
     case "$1" in
-        kb) setsid buffyboard >/dev/null 2>&1 & ;;
+        kb) setsid doas buffyboard >/dev/null 2>&1 & ;;
         *)  echo "Unknown target: $1" && return 1 ;;
     esac
 }
