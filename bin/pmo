@@ -1,0 +1,13 @@
+#!/bin/sh
+# Power management for postmarketOS
+
+PMO_LIB="$HOME/.config/bash/bin/lib/pmo"
+FB_BLANK="/sys/class/graphics/fb0/blank"
+
+case "$1" in
+    wake)   echo 0 > "$FB_BLANK" ;;
+    sleep)  echo 1 > "$FB_BLANK" ;;
+    status) [ "$(cat "$FB_BLANK")" = "0" ] && echo "awake" || echo "sleeping" ;;
+    setup)  "$PMO_LIB/setup.sh" ;;
+    *)      echo "Usage: pmo {wake|sleep|status|setup}" && exit 1 ;;
+esac

@@ -74,7 +74,7 @@ wait $CHECK_PID || VPS_PATH="/"
 
 sshfs "$SSH_TARGET:$VPS_PATH" "$MOUNT_POINT" \
     -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3 \
-    -o follow_symlinks,default_permissions,auto_cache &
+    -o follow_symlinks,auto_cache,idmap=user &
 
 SSHFS_PID=$!
 while kill -0 $SSHFS_PID 2>/dev/null; do
