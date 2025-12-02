@@ -26,5 +26,6 @@ case "$1" in
     start)  start_target "$2" ;;
     stop)   stop_target "$2" ;;
     setup)  "$PMO_LIB/setup.sh" ;;
-    *)      echo "Usage: pmo {wake|sleep|status|kb|start|stop|setup}" && exit 1 ;;
+    size)   setfont "ter-1${2}b" || echo "Valid sizes: 12 14 16 18 20 22 24 28 32" ;;
+    *)      echo "Usage: pmo {wake|sleep|status|kb|start|stop|setup|size}" && exit 1 ;;
 esac
