@@ -19,14 +19,14 @@ set_brightness() {
 
 start_target() {
     case "$1" in
-        kb) buffyboard </dev/null >/dev/null 2>&1 & ;;
+        kb) setsid buffyboard >/dev/null 2>&1 & ;;
         *)  echo "Unknown target: $1" && return 1 ;;
     esac
 }
 
 stop_target() {
     case "$1" in
-        kb) pkill -x buffyboard 2>/dev/null; clear ;;
+        kb) pkill -x buffyboard 2>/dev/null; echo 1 > "$FB_BLANK"; echo 0 > "$FB_BLANK" ;;
         *)  echo "Unknown target: $1" && return 1 ;;
     esac
 }
