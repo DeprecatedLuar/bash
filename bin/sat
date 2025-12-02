@@ -13,22 +13,23 @@ case "$1" in
 
     install)
         if [[ -z "$2" ]]; then
-            echo "Usage: sat install <program|repo>"
+            echo "Usage: sat install <program|repo> [program2] [program3] ..."
             exit 1
         fi
 
-        PROGRAM="$2"
-
-        # Check if wrapper exists in cargo-bay/programs
-        WRAPPER_URL="$SAT_BASE/cargo-bay/programs/${PROGRAM}.sh"
-        if curl -sSL --fail --head "$WRAPPER_URL" >/dev/null 2>&1; then
-            echo "Installing $PROGRAM via wrapper..."
-            curl -sSL "$WRAPPER_URL" | bash
-        else
-            # Fall back to repo's install.sh
-            echo "No wrapper found, trying $PROGRAM repo..."
-            curl -sSL "https://raw.githubusercontent.com/$GITHUB_USER/$PROGRAM/main/install.sh" | bash
-        fi
+        shift
+        for PROGRAM in "$@"; do
+            # Check if wrapper exists in cargo-bay/programs
+            WRAPPER_URL="$SAT_BASE/cargo-bay/programs/${PROGRAM}.sh"
+            if curl -sSL --fail --head "$WRAPPER_URL" >/dev/null 2>&1; then
+                echo "Installing $PROGRAM via wrapper..."
+                curl -sSL "$WRAPPER_URL" | bash
+            else
+                # Fall back to repo's install.sh
+                curl -sSL "https://raw.githubusercontent.com/$GITHUB_USER/$PROGRAM/main/install.sh" | bash
+            fi
+            echo ""
+        done
         ;;
 
     clone)

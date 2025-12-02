@@ -49,6 +49,3 @@ fi
 
 setup_sys_local "$HOME/.config/autostart" "/etc/xdg/autostart"
 
-#--[APPLICATIONS]-------------------------------
-
-setup_sys_local "$HOME/.local/share/applications" "/usr/share/applications"

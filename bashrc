@@ -160,6 +160,9 @@ fi
 # Load all custom configurations
 [ -f ~/.config/bash/modules/universal/source.sh ] && source ~/.config/bash/modules/universal/source.sh
 
+# Cleanup broken symlinks (self-healing)
+find "$HOME" "$HOME/.config" -maxdepth 1 -xtype l -delete 2>/dev/null
+
 
 # Cargo environment now handled in DEVELOPMENT TOOLS CONFIGURATION section above
 umask 002
