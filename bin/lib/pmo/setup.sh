@@ -4,7 +4,7 @@
 UDEV_RULE="/etc/udev/rules.d/90-pmo.rules"
 
 # Install dependencies
-for pkg in buffyboard libcap; do
+for pkg in buffyboard libcap musl-locales; do
     if ! apk info -e "$pkg" >/dev/null 2>&1; then
         echo "Installing $pkg..."
         if ! doas apk add --no-interactive "$pkg"; then
@@ -16,6 +16,9 @@ done
 
 # Add user to video group for display control
 doas adduser "$USER" video 2>/dev/null
+
+# Set UTF-8 locale
+grep -q 'LANG=C.UTF-8' ~/.profile 2>/dev/null || echo 'export LANG=C.UTF-8' >> ~/.profile
 
 # Allow setfont without root
 doas setcap cap_sys_tty_config+ep /usr/sbin/setfont
