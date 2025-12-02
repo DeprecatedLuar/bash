@@ -41,6 +41,7 @@ case "$1" in
     wake-switch) [ "$(cat "$STATE_FILE" 2>/dev/null)" = "awake" ] && pmo sleep || pmo wake ;;
     status) cat "$STATE_FILE" 2>/dev/null || echo "unknown" ;;
     kb|keyboard)       stop_target kb; start_target kb ;;
+    kb-switch)         pgrep -x buffyboard >/dev/null && stop_target kb || start_target kb ;;
     btn|buttons)       stop_target btn; start_target btn ;;
     start)       start_target "$2" ;;
     stop)        stop_target "$2" ;;
