@@ -1,0 +1,41 @@
+#!/bin/bash
+# conf - Quick access to Linux system config files
+
+edit() {
+  if [[ "$1" == /etc/* ]] && [[ ! -w "$1" ]]; then
+    sudo ${EDITOR:-vim} "$1"
+  else
+    ${EDITOR:-vim} "$1"
+  fi
+}
+
+case "$1" in
+  ssh)         edit ~/.ssh/config ;;
+  hosts)       edit /etc/hosts ;;
+  fstab)       edit /etc/fstab ;;
+  environment) edit /etc/environment ;;
+  hostname)    edit /etc/hostname ;;
+  resolv)      edit /etc/resolv.conf ;;
+  grub)        edit /etc/default/grub ;;
+  sources)     edit /etc/apt/sources.list ;;
+  profile)     edit /etc/profile ;;
+  ""|--help|-h)
+    echo "Usage: conf <config>"
+    echo ""
+    echo "Configs:"
+    echo "  ssh          ~/.ssh/config"
+    echo "  hosts        /etc/hosts"
+    echo "  fstab        /etc/fstab"
+    echo "  environment  /etc/environment"
+    echo "  hostname     /etc/hostname"
+    echo "  resolv       /etc/resolv.conf"
+    echo "  grub         /etc/default/grub"
+    echo "  sources      /etc/apt/sources.list"
+    echo "  profile      /etc/profile"
+    ;;
+  *)
+    echo "Unknown config: $1"
+    echo "Run 'conf --help' for available configs"
+    exit 1
+    ;;
+esac
