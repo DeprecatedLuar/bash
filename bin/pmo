@@ -13,7 +13,7 @@ start_target() {
 
 stop_target() {
     case "$1" in
-        kb) pkill -x buffyboard 2>/dev/null ;;
+        kb) pkill -x buffyboard 2>/dev/null; echo 1 > "$FB_BLANK"; echo 0 > "$FB_BLANK" ;;
         *)  echo "Unknown target: $1" && return 1 ;;
     esac
 }
