@@ -1,82 +1,34 @@
 #!/usr/bin/env bash
-# ~/.config/bash/bin/sat - Satellite installer
+# sat - Satellite installer (router)
 
 source "$HOME/.config/bash/modules/universal/paths.sh"
-
-SAT_BASE="https://raw.githubusercontent.com/$GITHUB_USER/the-satellite/main"
-SAT_LOCAL="$PROJECTS/cli/the-satellite"
-
-# Source OS detection (local or remote)
-if [[ -f "$SAT_LOCAL/internal/os_detection.sh" ]]; then
-    source "$SAT_LOCAL/internal/os_detection.sh"
-else
-    source <(curl -sSL "$SAT_BASE/internal/os_detection.sh")
-fi
-
-# Animated status output
-spin() {
-    local msg="$1" pid="$2"
-    local dots=""
-    while kill -0 "$pid" 2>/dev/null; do
-        printf "\r%s%-3s" "$msg" "$dots"
-        dots="${dots}."
-        [[ ${#dots} -gt 3 ]] && dots=""
-        sleep 0.2
-    done
-}
-
-status() { printf "\r%-40s\n" "$1"; }
-
-# Detect package manager based on distro family
-get_pkg_manager() {
-    local distro family
-    distro=$(detect_distro "$(detect_os)")
-    family=$(detect_distro_family "$distro")
-
-    case "$distro" in
-        termux) echo "pkg" ;;
-        *)
-            case "$family" in
-                debian) echo "apt" ;;
-                alpine) echo "apk" ;;
-                arch)   echo "pacman" ;;
-                rhel)   echo "dnf" ;;
-                *)      echo "" ;;
-            esac
-            ;;
-    esac
-}
-
-# Check if package exists in native repo
-pkg_exists() {
-    local pkg="$1" mgr="$2"
-    case "$mgr" in
-        apt)    apt-cache show "$pkg" &>/dev/null ;;
-        apk)    apk info -e "$pkg" &>/dev/null ;;
-        pacman) pacman -Si "$pkg" &>/dev/null ;;
-        dnf)    dnf info "$pkg" &>/dev/null ;;
-        pkg)    pkg search -e "^${pkg}$" &>/dev/null ;;
-        *)      return 1 ;;
-    esac
-}
-
-# Install package via native package manager
-pkg_install() {
-    local pkg="$1" mgr="$2"
-    case "$mgr" in
-        apt)    sudo apt install -y "$pkg" ;;
-        apk)    sudo apk add "$pkg" ;;
-        pacman) sudo pacman -S --noconfirm "$pkg" ;;
-        dnf)    sudo dnf install -y "$pkg" ;;
-        pkg)    pkg install -y "$pkg" ;;
-        *)      return 1 ;;
-    esac
-}
+source "$BASHRC/bin/lib/sat/common.sh"
 
 case "$1" in
-    update)
-        cd "$HOME/.config/bash" || exit 1
-        git pull
+    install)
+        [[ -z "$2" ]] && { echo "Usage: sat install <program> [program2] ..."; exit 1; }
+        shift
+        source "$BASHRC/bin/lib/sat/install.sh"
+        sat_install "$@"
+        ;;
+
+    uninstall)
+        [[ -z "$2" ]] && { echo "Usage: sat uninstall <program> [program2] ..."; exit 1; }
+        shift
+        for PROGRAM in "$@"; do
+            SOURCE=$(manifest_get "$PROGRAM")
+            if [[ -z "$SOURCE" ]]; then
+                status "$PROGRAM not tracked by sat"
+                continue
+            fi
+            printf "Removing %s" "$PROGRAM"
+            if pkg_remove "$PROGRAM" "$SOURCE" >/dev/null 2>&1; then
+                manifest_remove "$PROGRAM"
+                status "$PROGRAM removed [$SOURCE]"
+            else
+                status "$PROGRAM removal failed"
+            fi
+        done
         ;;
 
     shell)
@@ -85,99 +37,60 @@ case "$1" in
         sat_shell "$@"
         ;;
 
-    install)
-        if [[ -z "$2" ]]; then
-            echo "Usage: sat install <program|repo> [program2] [program3] ..."
-            exit 1
+    list)
+        if [[ "$2" == "-i" || "$2" == "--installed" ]]; then
+            echo "Installed via sat:"
+            while IFS='=' read -r prog source; do
+                [[ -n "$prog" ]] && printf "  %-20s [%s]\n" "$prog" "$source"
+            done < "$SAT_MANIFEST"
+        else
+            echo "Available wrappers:"
+            curl -sSL "$SAT_BASE/cargo-bay/programs/" 2>/dev/null | grep -oP '[\w-]+\.sh' | sed 's/\.sh$//' | sort
         fi
-
-        shift
-        PKG_MGR=$(get_pkg_manager)
-
-        for PROGRAM in "$@"; do
-            # 0. Check if already installed
-            if command -v "$PROGRAM" &>/dev/null; then
-                status "$PROGRAM already installed"
-                continue
-            fi
-
-            # 1. Check for satellite wrapper
-            printf "Installing %s" "$PROGRAM"
-            curl -sSL --fail --head "$SAT_BASE/cargo-bay/programs/${PROGRAM}.sh" >/dev/null 2>&1 &
-            spin "Installing $PROGRAM" $!
-            if wait $!; then
-                printf "\r"
-                source <(curl -sSL "$SAT_BASE/internal/fetcher.sh")
-                sat_init
-                sat_run "$PROGRAM"
-                status "$PROGRAM installed via wrapper"
-                continue
-            fi
-
-            # 2. Try native package manager
-            if [[ -n "$PKG_MGR" ]] && pkg_exists "$PROGRAM" "$PKG_MGR"; then
-                status "$PROGRAM found in $PKG_MGR"
-                if pkg_install "$PROGRAM" "$PKG_MGR"; then
-                    status "$PROGRAM installed via $PKG_MGR"
-                    continue
-                fi
-            fi
-
-            # 3. Try repo install.sh
-            curl -sSL --fail --head "https://raw.githubusercontent.com/$GITHUB_USER/$PROGRAM/main/install.sh" >/dev/null 2>&1 &
-            spin "Installing $PROGRAM" $!
-            if wait $!; then
-                printf "\r"
-                curl -sSL "https://raw.githubusercontent.com/$GITHUB_USER/$PROGRAM/main/install.sh" | bash
-                status "$PROGRAM installed via repo"
-                continue
-            fi
-
-            # 4. Try uv tool (isolated Python CLI)
-            if command -v uv &>/dev/null; then
-                uv tool install "$PROGRAM" &>/dev/null &
-                spin "Installing $PROGRAM" $!
-                if wait $!; then
-                    status "$PROGRAM installed via uv"
-                    continue
-                fi
-            fi
-
-            status "$PROGRAM not found"
-        done
         ;;
 
     clone)
-        if [[ -z "$2" ]]; then
-            echo "Usage: sat clone <repo> [destination]"
-            exit 1
-        fi
+        [[ -z "$2" ]] && { echo "Usage: sat clone <repo> [destination]"; exit 1; }
         REPO="$2"
-
-        if [[ -z "$3" ]]; then
-            read -p "Where to clone? (default: ./): " DEST
-            DEST="${DEST:-.}"
-        else
-            DEST="$3"
-        fi
-
+        DEST="${3:-.}"
+        [[ -z "$3" ]] && read -p "Where to clone? (default: ./): " DEST && DEST="${DEST:-.}"
         echo "Cloning $GITHUB_USER/$REPO to $DEST..."
         git clone "https://github.com/$GITHUB_USER/$REPO.git" "$DEST/$REPO"
         ;;
 
-    list)
-        echo "Available programs:"
-        curl -sSL "$SAT_BASE/cargo-bay/programs/" 2>/dev/null | grep -oP '[\w-]+\.sh' | sed 's/\.sh$//' | sort
+    update)
+        cd "$HOME/.config/bash" || exit 1
+        git pull
         ;;
 
     *)
-        echo "Usage: sat <command>"
-        echo ""
-        echo "Commands:"
-        echo "  install <program>   - Install program (tries: wrapper > native > repo > uv)"
-        echo "  shell <tool> [args] - Run tool once, auto-cleanup after"
-        echo "  clone <repo> [dest] - Clone your repo"
-        echo "  list                - List available program wrappers"
-        echo "  update              - Pull latest bash config"
+        cat << 'EOF'
+         ,-.
+        / \  `.  __..-,O
+       :   \ --''_..-'.'
+       |    . .-' `. '.
+       :     .     .`.'
+        \     `.  /  ..
+         \      `.   ' .
+          `,       `.   \
+         ,|,`.        `-.\
+        '.||  ``-...__..-`
+         |  |
+         |__|
+         /||\    Usage: sat <command>
+        //||\\
+       // || \\
+    __//__||__\\__
+   '--------------'
+
+Commands:
+  install <program>   - Install program (native > repo > uv > npm > wrapper)
+  uninstall <program> - Remove program installed via sat
+  shell <tool>        - Temp shell with tools, auto-cleanup on exit
+  list                - List available wrappers
+  list -i             - List installed programs
+  clone <repo> [dest] - Clone your repo
+  update              - Pull latest bash config
+EOF
         ;;
 esac

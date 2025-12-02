@@ -15,27 +15,20 @@ cleanup_orphans() {
 
         if ! kill -0 "$pid" 2>/dev/null; then
             while IFS='=' read -r key value; do
-                [[ "$key" == "TOOL" ]] && pkg_remove "$value" "$(grep "^SOURCE_$value=" "$manifest" | cut -d= -f2)"
+                [[ "$key" == "TOOL" ]] && shell_pkg_remove "$value" "$(grep "^SOURCE_$value=" "$manifest" | cut -d= -f2)"
             done < <(grep "^TOOL=" "$manifest")
             rm -rf "$session_dir"
         fi
     done
 }
 
-# Remove package via appropriate method
-pkg_remove() {
+# Remove package (shell version - silent output)
+shell_pkg_remove() {
     local pkg="$1" source="$2"
     [[ -z "$source" ]] && return
 
     printf "Removing %s..." "$pkg"
-    case "$source" in
-        apt)    sudo apt remove --purge -y "$pkg" >/dev/null 2>&1 && sudo apt autoremove -y >/dev/null 2>&1 ;;
-        apk)    sudo apk del "$pkg" >/dev/null 2>&1 ;;
-        pacman) sudo pacman -Rs --noconfirm "$pkg" >/dev/null 2>&1 ;;
-        dnf)    sudo dnf remove -y "$pkg" >/dev/null 2>&1 ;;
-        pkg)    pkg uninstall -y "$pkg" >/dev/null 2>&1 ;;
-        uv)     uv tool uninstall "$pkg" >/dev/null 2>&1 ;;
-    esac
+    pkg_remove "$pkg" "$source" >/dev/null 2>&1
     printf "\rRemoved %-30s\n" "$pkg"
 }
 
@@ -44,16 +37,34 @@ install_tool() {
     local tool="$1"
     local pkg_mgr=$(get_pkg_manager)
 
-    # Try uv first for Python CLIs
+    # 1. Try native package manager (cleanest removal)
+    if [[ -n "$pkg_mgr" ]] && pkg_exists "$tool" "$pkg_mgr"; then
+        if pkg_install "$tool" "$pkg_mgr" >/dev/null 2>&1; then
+            echo "$pkg_mgr"
+            return 0
+        fi
+    fi
+
+    # 2. Try uv for Python CLIs (isolated, easy removal)
     if command -v uv &>/dev/null && uv tool install "$tool" >/dev/null 2>&1; then
         echo "uv"
         return 0
     fi
 
-    # Try native package manager
-    if [[ -n "$pkg_mgr" ]] && pkg_exists "$tool" "$pkg_mgr"; then
-        if pkg_install "$tool" "$pkg_mgr" >/dev/null 2>&1; then
-            echo "$pkg_mgr"
+    # 3. Try npm for Node CLIs
+    if command -v npm &>/dev/null && npm show "$tool" >/dev/null 2>&1; then
+        if npm install -g "$tool" >/dev/null 2>&1; then
+            echo "npm"
+            return 0
+        fi
+    fi
+
+    # 4. Try satellite wrapper (last resort)
+    if curl -sSL --fail --head "$SAT_BASE/cargo-bay/programs/${tool}.sh" >/dev/null 2>&1; then
+        source <(curl -sSL "$SAT_BASE/internal/fetcher.sh")
+        sat_init
+        if sat_run "$tool" >/dev/null 2>&1; then
+            echo "wrapper"
             return 0
         fi
     fi
@@ -155,7 +166,7 @@ EOF
         while IFS='=' read -r key value; do
             if [[ "$key" == "TOOL" ]]; then
                 local src=$(grep "^SOURCE_$value=" "$manifest" | cut -d= -f2)
-                pkg_remove "$value" "$src"
+                shell_pkg_remove "$value" "$src"
             fi
         done < "$manifest"
     fi
