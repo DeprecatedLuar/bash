@@ -3,6 +3,19 @@
 
 PMO_LIB="$HOME/.config/bash/bin/lib/pmo"
 FB_BLANK="/sys/class/graphics/fb0/blank"
+BL_PATH="/sys/class/backlight/backlight"
+
+set_brightness() {
+    max=$(cat "$BL_PATH/max_brightness")
+    cur=$(cat "$BL_PATH/brightness")
+    case "$1" in
+        +*|-*) new=$((cur + (max * ${1} / 100))) ;;
+        *)     new=$((max * $1 / 100)) ;;
+    esac
+    [ "$new" -lt 0 ] && new=0
+    [ "$new" -gt "$max" ] && new=$max
+    echo "$new" > "$BL_PATH/brightness"
+}
 
 start_target() {
     case "$1" in
@@ -22,10 +35,11 @@ case "$1" in
     wake)   echo 0 > "$FB_BLANK" ;;
     sleep)  echo 1 > "$FB_BLANK" ;;
     status) [ "$(cat "$FB_BLANK")" = "0" ] && echo "awake" || echo "sleeping" ;;
-    kb)     stop_target kb; start_target kb ;;
-    start)  start_target "$2" ;;
-    stop)   stop_target "$2" ;;
-    setup)  "$PMO_LIB/setup.sh" ;;
-    size)   doas setfont "ter-1${2}b" || echo "Valid sizes: 12 14 16 18 20 22 24 28 32" ;;
-    *)      echo "Usage: pmo {wake|sleep|status|kb|start|stop|setup|size}" && exit 1 ;;
+    kb|keyboard) stop_target kb; start_target kb ;;
+    start)       start_target "$2" ;;
+    stop)        stop_target "$2" ;;
+    setup)       "$PMO_LIB/setup.sh" ;;
+    size)        doas setfont "ter-1${2}b" || echo "Valid sizes: 12 14 16 18 20 22 24 28 32" ;;
+    bl|backlight|lux) set_brightness "$2" ;;
+    *)           echo "Usage: pmo {wake|sleep|status|kb|start|stop|setup|size|bl}" && exit 1 ;;
 esac
