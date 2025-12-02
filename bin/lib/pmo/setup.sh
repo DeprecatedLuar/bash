@@ -7,7 +7,7 @@ UDEV_RULE="/etc/udev/rules.d/90-pmo.rules"
 for pkg in buffyboard libcap; do
     if ! apk info -e "$pkg" >/dev/null 2>&1; then
         echo "Installing $pkg..."
-        if ! doas apk add -q "$pkg"; then
+        if ! doas apk add --no-interactive "$pkg"; then
             echo "Error: Failed to install $pkg" >&2
             exit 1
         fi
@@ -18,7 +18,7 @@ done
 doas adduser "$USER" video 2>/dev/null
 
 # Allow setfont without root
-doas setcap cap_sys_tty_config+ep /usr/bin/setfont
+doas setcap cap_sys_tty_config+ep /usr/sbin/setfont
 
 # Udev rules for device access
 echo "Creating udev rules..."
