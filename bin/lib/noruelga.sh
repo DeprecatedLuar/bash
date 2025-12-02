@@ -1,21 +1,24 @@
 #!/usr/bin/env bash
 
-# Deploy noruelga SSH key for root access
-# - Adds NORUELGA=1 to local.sh
-# - Configures sshd for key-only root login
+# Deploy noruelga SSH key for user and root access
+# - Sets up user SSH (symlink + authorized_keys)
+# - Configures sshd for key-only root login (optional)
 # - Deploys public key to /root/.ssh/authorized_keys
 
 set -e
 
 SSHD_CONFIG="/etc/ssh/sshd_config"
-LOCAL_SH="$BASHRC/modules/local.sh"
+PUBKEY="$BASHRC/modules/universal/.noruelga.pub"
 
-# Add NORUELGA to local.sh if not present
-if ! grep -q "NORUELGA" "$LOCAL_SH" 2>/dev/null; then
-    echo 'export NORUELGA=1' >> "$LOCAL_SH"
-    echo "Added NORUELGA=1 to local.sh"
+# User SSH setup
+mkdir -p "$HOME/.ssh"
+ln -sf "$PUBKEY" "$HOME/.ssh/noruelga.pub"
+if ! grep -qF "$(cat "$PUBKEY")" "$HOME/.ssh/authorized_keys" 2>/dev/null; then
+    cat "$PUBKEY" >> "$HOME/.ssh/authorized_keys"
+    chmod 600 "$HOME/.ssh/authorized_keys"
+    echo "Added key to user authorized_keys"
 else
-    echo "NORUELGA already in local.sh"
+    echo "User authorized_keys already has key"
 fi
 
 # Check current sshd PermitRootLogin setting
@@ -38,7 +41,7 @@ fi
 
 # Deploy key to root
 sudo mkdir -p /root/.ssh
-sudo cp "$BASHRC/modules/universal/.noruelga.pub" /root/.ssh/authorized_keys
+sudo cp "$PUBKEY" /root/.ssh/authorized_keys
 sudo chmod 700 /root/.ssh
 sudo chmod 600 /root/.ssh/authorized_keys
 echo "Deployed key to /root/.ssh/authorized_keys"
