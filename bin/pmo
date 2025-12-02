@@ -4,6 +4,7 @@
 PMO_LIB="$HOME/.config/bash/bin/lib/pmo"
 FB_BLANK="/sys/class/graphics/fb0/blank"
 BL_PATH="/sys/class/backlight/backlight"
+STATE_FILE="/tmp/pmo-state"
 
 set_brightness() {
     max=$(cat "$BL_PATH/max_brightness")
@@ -34,10 +35,10 @@ stop_target() {
 }
 
 case "$1" in
-    wake)   echo 0 > "$FB_BLANK" ;;
-    sleep)  echo 1 > "$FB_BLANK" ;;
-    wake-switch) [ "$(cat "$FB_BLANK")" = "0" ] && pmo sleep || pmo wake ;;
-    status) [ "$(cat "$FB_BLANK")" = "0" ] && echo "awake" || echo "sleeping" ;;
+    wake)   echo 0 > "$FB_BLANK"; echo awake > "$STATE_FILE" ;;
+    sleep)  echo 1 > "$FB_BLANK"; echo sleeping > "$STATE_FILE" ;;
+    wake-switch) [ "$(cat "$STATE_FILE" 2>/dev/null)" = "awake" ] && pmo sleep || pmo wake ;;
+    status) cat "$STATE_FILE" 2>/dev/null || echo "unknown" ;;
     kb|keyboard)       stop_target kb; start_target kb ;;
     btn|buttons)       stop_target btn; start_target btn ;;
     start)       start_target "$2" ;;
