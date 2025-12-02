@@ -47,7 +47,7 @@ case "$1" in
     setup)       "$PMO_LIB/setup.sh" ;;
     size)        setfont "ter-1${2}b" || echo "Valid sizes: 12 14 16 18 20 22 24 28 32" ;;
     bl|backlight|lux) set_brightness "$2" ;;
-    charge-speed) echo $(($2 * 1000)) > "$CHARGE_LIMIT" && echo "$(cat "$CHARGE_LIMIT")" ;;
+    charge-speed) echo $(($2 * 1000)) > "$CHARGE_LIMIT" && echo "$(cat "$CHARGE_LIMIT")µA" ;;
     -e|edit) ${EDITOR:-vi} "$HOME/.config/triggerhappy/buttons.conf" ;;
     *)           echo "Usage: pmo {wake|sleep|wake-switch|status|kb|btn|start|stop|setup|size|bl|-e}" && exit 1 ;;
 esac
