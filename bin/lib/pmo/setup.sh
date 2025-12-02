@@ -6,7 +6,10 @@ UDEV_RULE="/etc/udev/rules.d/90-pmo.rules"
 # Install buffyboard if missing
 if ! command -v buffyboard >/dev/null 2>&1; then
     echo "Installing buffyboard..."
-    doas apk add buffyboard
+    if ! doas apk add buffyboard; then
+        echo "Error: Failed to install buffyboard" >&2
+        exit 1
+    fi
 fi
 
 # Add user to required groups for device access
