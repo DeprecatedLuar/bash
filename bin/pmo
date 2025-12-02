@@ -19,15 +19,17 @@ set_brightness() {
 
 start_target() {
     case "$1" in
-        kb) setsid buffyboard >/dev/null 2>&1 & ;;
-        *)  echo "Unknown target: $1" && return 1 ;;
+        kb)  setsid buffyboard >/dev/null 2>&1 & ;;
+        btn) setsid thd --triggers "$HOME/.config/triggerhappy/" /dev/input/event* >/dev/null 2>&1 & ;;
+        *)   echo "Unknown target: $1" && return 1 ;;
     esac
 }
 
 stop_target() {
     case "$1" in
-        kb) pkill -x buffyboard 2>/dev/null; echo 1 > "$FB_BLANK"; echo 0 > "$FB_BLANK" ;;
-        *)  echo "Unknown target: $1" && return 1 ;;
+        kb)  pkill -x buffyboard 2>/dev/null; echo 1 > "$FB_BLANK"; echo 0 > "$FB_BLANK" ;;
+        btn) pkill -x thd 2>/dev/null ;;
+        *)   echo "Unknown target: $1" && return 1 ;;
     esac
 }
 
@@ -35,11 +37,13 @@ case "$1" in
     wake)   echo 0 > "$FB_BLANK"; start_target kb ;;
     sleep)  echo 1 > "$FB_BLANK" ;;
     status) [ "$(cat "$FB_BLANK")" = "0" ] && echo "awake" || echo "sleeping" ;;
-    kb|keyboard) stop_target kb; start_target kb ;;
+    kb|keyboard)       stop_target kb; start_target kb ;;
+    btn|buttons)       stop_target btn; start_target btn ;;
     start)       start_target "$2" ;;
     stop)        stop_target "$2" ;;
     setup)       "$PMO_LIB/setup.sh" ;;
     size)        setfont "ter-1${2}b" || echo "Valid sizes: 12 14 16 18 20 22 24 28 32" ;;
     bl|backlight|lux) set_brightness "$2" ;;
-    *)           echo "Usage: pmo {wake|sleep|status|kb|start|stop|setup|size|bl}" && exit 1 ;;
+    -e|edit) ${EDITOR:-vi} "$HOME/.config/triggerhappy/buttons.conf" ;;
+    *)           echo "Usage: pmo {wake|sleep|status|kb|btn|start|stop|setup|size|bl|-e}" && exit 1 ;;
 esac
