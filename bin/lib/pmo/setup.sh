@@ -12,10 +12,8 @@ if ! command -v buffyboard >/dev/null 2>&1; then
     fi
 fi
 
-# Add user to required groups for device access
-echo "Adding $USER to input and tty groups..."
-doas adduser "$USER" input 2>/dev/null
-doas adduser "$USER" tty 2>/dev/null
+# Add user to video group for display control
+doas adduser "$USER" video 2>/dev/null
 
 # Udev rules for device access
 echo "Creating udev rules..."
@@ -24,8 +22,8 @@ doas tee "$UDEV_RULE" > /dev/null << 'EOF'
 SUBSYSTEM=="graphics", KERNEL=="fb0", RUN+="/bin/chgrp video /sys%p/blank", RUN+="/bin/chmod g+w /sys%p/blank"
 SUBSYSTEM=="backlight", RUN+="/bin/chgrp video /sys%p/brightness", RUN+="/bin/chmod g+w /sys%p/brightness"
 # Buffyboard - input devices
-KERNEL=="uinput", GROUP="input", MODE="0660"
-KERNEL=="tty0", GROUP="tty", MODE="0660"
+KERNEL=="uinput", TAG+="uaccess"
+KERNEL=="tty0", TAG+="uaccess"
 EOF
 doas udevadm control --reload-rules
 doas udevadm trigger
