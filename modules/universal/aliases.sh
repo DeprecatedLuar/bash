@@ -6,6 +6,8 @@ reload() {
     $BASHRC/bin/lib/reload.sh "$@"
 }
 
+alias deploy-noruelga='$BASHRC/bin/lib/noruelga.sh'
+
 ensure-dirs() {
     $BASHRC/bin/lib/ensure-dirs.sh "$@"
 }

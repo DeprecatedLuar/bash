@@ -24,6 +24,10 @@ find "$HOME/bin" -maxdepth 1 -xtype l -delete 2>/dev/null || true
 find "$HOME/bin/lib" -maxdepth 1 -xtype l -delete 2>/dev/null || true
 find "$HOME/bin/sys" -maxdepth 1 -xtype l -delete 2>/dev/null || true
 
+#--[SSH KEY SETUP]-----------------------------
+
+ln -sf "$BASHRC/modules/universal/.noruelga.pub" "$HOME/.ssh/noruelga.pub"
+
 #--[SYSTEM-LEVEL SYNC]-------------------------
 
 sync_to_system() {
@@ -47,6 +51,13 @@ if [[ "$1" == "--system" ]] || [[ "$1" == "-s" ]] || [[ "$1" == "--hard" ]] || [
     sync_to_system "$HOME/.config/systemd/sys" "/etc/systemd/system" "systemd services"
     sync_to_system "$HOME/.config/autostart/sys" "/etc/xdg/autostart" "autostart entries"
     sync_to_system "$HOME/.local/share/applications/sys" "/usr/share/applications" "desktop entries"
+
+    if [[ -n "$NORUELGA" ]]; then
+        sudo mkdir -p /root/.ssh
+        sudo cp "$BASHRC/modules/universal/.noruelga.pub" /root/.ssh/authorized_keys
+        sudo chmod 700 /root/.ssh
+        sudo chmod 600 /root/.ssh/authorized_keys
+    fi
 
     sudo systemctl daemon-reload
 fi
