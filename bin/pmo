@@ -34,8 +34,9 @@ stop_target() {
 }
 
 case "$1" in
-    wake)   echo 0 > "$FB_BLANK"; start_target kb ;;
+    wake)   echo 0 > "$FB_BLANK" ;;
     sleep)  echo 1 > "$FB_BLANK" ;;
+    wake-switch) [ "$(cat "$FB_BLANK")" = "0" ] && "$0" sleep || "$0" wake ;;
     status) [ "$(cat "$FB_BLANK")" = "0" ] && echo "awake" || echo "sleeping" ;;
     kb|keyboard)       stop_target kb; start_target kb ;;
     btn|buttons)       stop_target btn; start_target btn ;;
@@ -45,5 +46,5 @@ case "$1" in
     size)        setfont "ter-1${2}b" || echo "Valid sizes: 12 14 16 18 20 22 24 28 32" ;;
     bl|backlight|lux) set_brightness "$2" ;;
     -e|edit) ${EDITOR:-vi} "$HOME/.config/triggerhappy/buttons.conf" ;;
-    *)           echo "Usage: pmo {wake|sleep|status|kb|btn|start|stop|setup|size|bl|-e}" && exit 1 ;;
+    *)           echo "Usage: pmo {wake|sleep|wake-switch|status|kb|btn|start|stop|setup|size|bl|-e}" && exit 1 ;;
 esac
