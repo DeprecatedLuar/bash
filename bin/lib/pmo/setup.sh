@@ -3,14 +3,16 @@
 
 UDEV_RULE="/etc/udev/rules.d/90-pmo.rules"
 
-# Install buffyboard if missing
-if ! command -v buffyboard >/dev/null 2>&1; then
-    echo "Installing buffyboard..."
-    if ! doas apk add buffyboard; then
-        echo "Error: Failed to install buffyboard" >&2
-        exit 1
+# Install dependencies
+for pkg in buffyboard libcap; do
+    if ! apk info -e "$pkg" >/dev/null 2>&1; then
+        echo "Installing $pkg..."
+        if ! doas apk add "$pkg"; then
+            echo "Error: Failed to install $pkg" >&2
+            exit 1
+        fi
     fi
-fi
+done
 
 # Add user to video group for display control
 doas adduser "$USER" video 2>/dev/null
