@@ -18,16 +18,30 @@ case "$1" in
         fi
 
         shift
+
+        # Separate wrappers from repos
+        WRAPPERS=()
+        REPOS=()
         for PROGRAM in "$@"; do
-            # Check if wrapper exists in cargo-bay/programs
             WRAPPER_URL="$SAT_BASE/cargo-bay/programs/${PROGRAM}.sh"
             if curl -sSL --fail --head "$WRAPPER_URL" >/dev/null 2>&1; then
-                echo "Installing $PROGRAM via wrapper..."
-                curl -sSL "$WRAPPER_URL" | bash
+                WRAPPERS+=("$PROGRAM")
             else
-                # Fall back to repo's install.sh
-                curl -sSL "https://raw.githubusercontent.com/$GITHUB_USER/$PROGRAM/main/install.sh" | bash
+                REPOS+=("$PROGRAM")
             fi
+        done
+
+        # Install wrappers via fetcher (downloads to /tmp with deps)
+        if [[ ${#WRAPPERS[@]} -gt 0 ]]; then
+            source <(curl -sSL "$SAT_BASE/internal/fetcher.sh")
+            sat_init
+            sat_run_all "${WRAPPERS[@]}"
+        fi
+
+        # Install repos via their install.sh
+        for REPO in "${REPOS[@]}"; do
+            echo "Installing $REPO from repo..."
+            curl -sSL "https://raw.githubusercontent.com/$GITHUB_USER/$REPO/main/install.sh" | bash
             echo ""
         done
         ;;
