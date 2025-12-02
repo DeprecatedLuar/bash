@@ -15,6 +15,9 @@ fi
 # Add user to video group for display control
 doas adduser "$USER" video 2>/dev/null
 
+# Allow setfont without root
+doas setcap cap_sys_tty_config+ep /usr/bin/setfont
+
 # Udev rules for device access
 echo "Creating udev rules..."
 doas tee "$UDEV_RULE" > /dev/null << 'EOF'
