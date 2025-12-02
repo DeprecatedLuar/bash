@@ -36,7 +36,7 @@ stop_target() {
 case "$1" in
     wake)   echo 0 > "$FB_BLANK" ;;
     sleep)  echo 1 > "$FB_BLANK" ;;
-    wake-switch) [ "$(cat "$FB_BLANK")" = "0" ] && echo 1 > "$FB_BLANK" || echo 0 > "$FB_BLANK" ;;
+    wake-switch) [ "$(cat "$FB_BLANK")" = "0" ] && pmo sleep || pmo wake ;;
     status) [ "$(cat "$FB_BLANK")" = "0" ] && echo "awake" || echo "sleeping" ;;
     kb|keyboard)       stop_target kb; start_target kb ;;
     btn|buttons)       stop_target btn; start_target btn ;;
