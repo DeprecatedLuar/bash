@@ -7,7 +7,7 @@ UDEV_RULE="/etc/udev/rules.d/90-pmo.rules"
 for pkg in buffyboard libcap; do
     if ! apk info -e "$pkg" >/dev/null 2>&1; then
         echo "Installing $pkg..."
-        if ! doas apk add "$pkg"; then
+        if ! doas apk add -q "$pkg"; then
             echo "Error: Failed to install $pkg" >&2
             exit 1
         fi
