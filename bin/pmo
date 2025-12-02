@@ -19,7 +19,7 @@ set_brightness() {
 
 start_target() {
     case "$1" in
-        kb) ( buffyboard >/dev/null 2>&1 & ) ;;
+        kb) buffyboard </dev/null >/dev/null 2>&1 & ;;
         *)  echo "Unknown target: $1" && return 1 ;;
     esac
 }
