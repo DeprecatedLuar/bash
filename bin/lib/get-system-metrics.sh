@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 metrics=("$@")
 [[ ${#metrics[@]} -eq 0 ]] && metrics=(cpu ram gpu fan bat)

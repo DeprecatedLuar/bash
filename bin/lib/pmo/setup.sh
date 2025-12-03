@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env sh
 # Setup script for pmo - configures permissions for non-root access
 
 UDEV_RULE="/etc/udev/rules.d/90-pmo.rules"

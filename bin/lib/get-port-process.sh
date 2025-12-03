@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 port="$1"
 if [[ -z "$port" ]]; then

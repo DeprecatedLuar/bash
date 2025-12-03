@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # tranz - Universal file format converter
 
 # Configuration

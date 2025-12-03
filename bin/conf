@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # conf - Quick access to Linux system config files
 
 edit() {

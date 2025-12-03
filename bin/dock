@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 DEFAULT_HOST="nuremberg"
 DOCK_DIR="/tmp/dock"

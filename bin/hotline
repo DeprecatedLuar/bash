@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 SESSION="hotline"
 INPUT_SCRIPT="${ROFI_INPUT_SCRIPT:-$HOME/.config/dots/config/rofi/applets/input-text/input-text.sh}"

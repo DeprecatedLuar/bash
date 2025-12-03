@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 items=$(gdbus call --session \
     --dest org.kde.StatusNotifierWatcher \

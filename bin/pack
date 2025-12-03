@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # pack - Universal archive creator
 
 FORMAT="tar.gz"

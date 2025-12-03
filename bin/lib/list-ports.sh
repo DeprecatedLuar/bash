@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 lsof -i -P -n | awk 'NR>1 && /LISTEN/ {
     split($9, a, ":")

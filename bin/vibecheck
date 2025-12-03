@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 [[ ! -L ~/bin/vch ]] && ln -sf vibecheck ~/bin/vch
 

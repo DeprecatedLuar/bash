@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # unpack - Universal archive extractor
 
 KEEP_ORIGINAL=false
