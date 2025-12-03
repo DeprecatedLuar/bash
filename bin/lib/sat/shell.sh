@@ -172,6 +172,22 @@ sat_shell() {
         fi
     done
 
+    # Catch dependency-installed tools (requested but installed as deps of other packages)
+    for tool in "${to_install[@]}"; do
+        if command -v "$tool" &>/dev/null && ! grep -q "^TOOL=$tool$" "$manifest" 2>/dev/null; then
+            local src=$(detect_source "$tool")
+            [[ -z "$src" || "$src" == "unknown" ]] && continue
+            local display=$(source_display "$src")
+            local light=$(source_light "$src")
+            local color=$(source_color "$display")
+            printf "${light}%-20s${C_RESET} [${color}%s${C_RESET}] (dependency)\n" "$tool" "$display"
+            echo "TOOL=$tool" >> "$manifest"
+            echo "SOURCE_$tool=$src" >> "$manifest"
+            master_add "$tool" "$src" "$$"
+            installed+=("$tool")
+        fi
+    done
+
     # Abort if nothing to do
     if [[ ${#installed[@]} -eq 0 && ${#already_have[@]} -eq 0 ]]; then
         echo "No tools available"
