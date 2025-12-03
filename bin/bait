@@ -1,0 +1,2 @@
+#!/bin/bash
+fd . ~ 2>/dev/null | fzf -q "$1"
