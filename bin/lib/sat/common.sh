@@ -72,7 +72,7 @@ fi
 # Manifest helpers
 manifest_add() { echo "$1=$2" >> "$SAT_MANIFEST"; }
 manifest_get() { grep "^$1=" "$SAT_MANIFEST" 2>/dev/null | cut -d= -f2; }
-manifest_remove() { sed -i "/^$1=/d" "$SAT_MANIFEST"; }
+manifest_remove() { /usr/bin/sed -i "/^$1=/d" "$SAT_MANIFEST"; }
 
 # Animated status output (legacy)
 spin() {
@@ -211,7 +211,7 @@ detect_source() {
         */.cargo/bin/*|*/dev-tools/cargo/bin/*)  echo "cargo" ;;
         */dev-tools/npm/*|*/.npm-global/*)       echo "npm" ;;
         */dev-tools/go/bin/*|*/go/bin/*)         echo "go" ;;
-        */.local/share/uv/tools/*|*/.local/bin/*) echo "uv" ;;
+        */.local/share/uv/tools/*) echo "uv" ;;
         */linuxbrew/*|*/homebrew/*)              echo "brew" ;;
         /nix/store/*|*/.nix-profile/*)           echo "nix" ;;
         /usr/bin/*|/bin/*|/usr/local/bin/*|/usr/games/*) echo "system" ;;
@@ -447,6 +447,139 @@ install_with_fallback() {
 
     return 1
 }
+
+# =============================================================================
+# SNAPSHOT-BASED CONFIG CLEANUP (for sat shell)
+# =============================================================================
+
+# Session storage location (persistent, survives crashes)
+SAT_SESSIONS_DIR="$SAT_DATA/sessions"
+
+# Take snapshot of config directories and dotfiles
+take_snapshot() {
+    local snapshot_file="$1"
+    {
+        # XDG Base Directories
+        [[ -d "$HOME/.config" ]] && find "$HOME/.config" -maxdepth 1 -type d -printf "%f\n"
+        [[ -d "$HOME/.local/share" ]] && find "$HOME/.local/share" -maxdepth 1 -type d -printf "%f\n"
+        [[ -d "$HOME/.local/state" ]] && find "$HOME/.local/state" -maxdepth 1 -type d -printf "%f\n"
+        [[ -d "$HOME/.cache" ]] && find "$HOME/.cache" -maxdepth 1 -type d -printf "%f\n"
+
+        # Root home dotfiles (hidden files/dirs starting with .)
+        find "$HOME" -maxdepth 1 -name ".*" \( -type f -o -type d \) -printf "%f\n"
+    } 2>/dev/null | grep -v '^\.$' | sort -u > "$snapshot_file"
+}
+
+# Word boundary matching - check if tool name appears as complete word in dir name
+# Example: "saul" matches "better-curl-saul" but not "saulconfig"
+# Separators: dash (-), underscore (_), start/end of string
+matches_tool_name() {
+    local dir_name="$1"
+    local tool="$2"
+
+    # Skip very short names (too risky - "go", "fd", etc)
+    [[ ${#tool} -lt 3 ]] && return 1
+
+    # Case-insensitive comparison
+    local dir_lower="${dir_name,,}"
+    local tool_lower="${tool,,}"
+
+    # Check if tool appears as a complete word
+    # Regex: (start OR separator) + tool + (separator OR end)
+    if [[ "$dir_lower" =~ (^|[-_])${tool_lower}([-_]|$) ]]; then
+        return 0
+    fi
+
+    return 1
+}
+
+# Clean up configs created during session
+cleanup_session_configs() {
+    local snapshot_before="$1"
+    local snapshot_after="$2"
+    local manifest="$3"
+
+    # Take snapshot after session
+    take_snapshot "$snapshot_after"
+
+    # Get list of installed tools from manifest
+    local installed_tools=()
+    while IFS='=' read -r key value; do
+        [[ "$key" == "TOOL" ]] && installed_tools+=("$value")
+    done < "$manifest"
+
+    [[ ${#installed_tools[@]} -eq 0 ]] && return
+
+    # Find new items (created during session)
+    local new_items=$(comm -13 "$snapshot_before" "$snapshot_after")
+
+    # Match and remove items that match installed tools
+    while IFS= read -r item_name; do
+        [[ -z "$item_name" ]] && continue
+
+        for tool in "${installed_tools[@]}"; do
+            if matches_tool_name "$item_name" "$tool"; then
+                # XDG locations
+                [[ -d "$HOME/.config/$item_name" ]] && rm -rf "$HOME/.config/$item_name" && \
+                    printf "  ${C_DIM}Removed config: ~/.config/$item_name${C_RESET}\n"
+                [[ -d "$HOME/.local/share/$item_name" ]] && rm -rf "$HOME/.local/share/$item_name" && \
+                    printf "  ${C_DIM}Removed data: ~/.local/share/$item_name${C_RESET}\n"
+                [[ -d "$HOME/.local/state/$item_name" ]] && rm -rf "$HOME/.local/state/$item_name" && \
+                    printf "  ${C_DIM}Removed state: ~/.local/state/$item_name${C_RESET}\n"
+                [[ -d "$HOME/.cache/$item_name" ]] && rm -rf "$HOME/.cache/$item_name" && \
+                    printf "  ${C_DIM}Removed cache: ~/.cache/$item_name${C_RESET}\n"
+
+                # Root dotfiles (files or directories)
+                [[ -e "$HOME/$item_name" ]] && rm -rf "$HOME/$item_name" && \
+                    printf "  ${C_DIM}Removed dotfile: ~/$item_name${C_RESET}\n"
+
+                break
+            fi
+        done
+    done <<< "$new_items"
+}
+
+# Clean up sessions from dead processes (crash recovery)
+cleanup_orphaned_sessions() {
+    [[ ! -d "$SAT_SESSIONS_DIR" ]] && return
+
+    for session_dir in "$SAT_SESSIONS_DIR"/*/; do
+        [[ ! -d "$session_dir" ]] && continue
+
+        local pid=$(basename "$session_dir")
+
+        # Check if process still alive
+        if ! kill -0 "$pid" 2>/dev/null; then
+            printf "${C_DIM}Cleaning orphaned session: $pid${C_RESET}\n"
+
+            # If snapshots exist, clean up configs
+            if [[ -f "$session_dir/manifest" && -f "$session_dir/snapshot-before.txt" ]]; then
+                local snapshot_after="$session_dir/snapshot-after.txt"
+                take_snapshot "$snapshot_after"
+                cleanup_session_configs \
+                    "$session_dir/snapshot-before.txt" \
+                    "$snapshot_after" \
+                    "$session_dir/manifest"
+            fi
+
+            # Remove packages
+            if [[ -f "$session_dir/manifest" ]]; then
+                while IFS='=' read -r key value; do
+                    if [[ "$key" == "TOOL" ]]; then
+                        local src=$(grep "^SOURCE_$value=" "$session_dir/manifest" | cut -d= -f2)
+                        [[ -n "$src" ]] && pkg_remove "$value" "$src" >/dev/null 2>&1
+                    fi
+                done < "$session_dir/manifest"
+            fi
+
+            rm -rf "$session_dir"
+        fi
+    done
+}
+
+# =============================================================================
+# DEPENDENCIES
+# =============================================================================
 
 # Core dependencies (required for sat to function)
 SAT_DEPS=(jq curl)

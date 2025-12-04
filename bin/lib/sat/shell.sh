@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # sat shell - temporary environment with auto-cleanup
-# Note: SAT_RUN_DIR, SAT_SHELL_MASTER defined in common.sh
+# Note: SAT_RUN_DIR, SAT_SHELL_MASTER, SAT_SESSIONS_DIR defined in common.sh
 
 # Master manifest helpers (format: tool:source:pid per line)
 master_add() {
@@ -10,7 +10,7 @@ master_add() {
 
 master_remove_pid() {
     local pid="$1"
-    [[ -f "$SAT_SHELL_MASTER" ]] && sed -i "/:$pid\$/d" "$SAT_SHELL_MASTER"
+    [[ -f "$SAT_SHELL_MASTER" ]] && /usr/bin/sed -i "/:$pid\$/d" "$SAT_SHELL_MASTER"
 }
 
 master_tool_has_other_live_pids() {
@@ -29,31 +29,21 @@ master_get_source() {
     [[ -f "$SAT_SHELL_MASTER" ]] && grep "^$tool:" "$SAT_SHELL_MASTER" | head -1 | cut -d: -f2
 }
 
-# Cleanup dead entries from master manifest and uninstall orphaned tools
+# Cleanup dead entries from master manifest
 cleanup_master() {
     [[ ! -f "$SAT_SHELL_MASTER" ]] && return
     local temp=$(mktemp)
     while IFS=: read -r tool source pid; do
         [[ -z "$tool" ]] && continue
         if kill -0 "$pid" 2>/dev/null; then
-            # PID alive, keep entry
             echo "$tool:$source:$pid" >> "$temp"
         else
-            # PID dead - check if other sessions need it or if permanently tracked
             if ! master_tool_has_other_live_pids "$tool" "$pid" && [[ -z "$(manifest_get "$tool")" ]]; then
                 pkg_remove "$tool" "$source" >/dev/null 2>&1
             fi
         fi
     done < "$SAT_SHELL_MASTER"
     mv "$temp" "$SAT_SHELL_MASTER"
-    # Also clean orphan session dirs
-    if [[ -d "$SAT_RUN_DIR" ]]; then
-        for dir in "$SAT_RUN_DIR"/*/; do
-            [[ ! -d "$dir" ]] && continue
-            local pid=$(basename "$dir")
-            kill -0 "$pid" 2>/dev/null || rm -rf "$dir"
-        done
-    fi
 }
 
 # =============================================================================
@@ -62,7 +52,10 @@ cleanup_master() {
 shell_cleanup() {
     local session_pid="$1"
     local session_dir="$2"
+    local xdg_dir="$3"
     local session_manifest="$session_dir/manifest"
+    local snapshot_before="$session_dir/snapshot-before.txt"
+    local snapshot_after="$session_dir/snapshot-after.txt"
 
     echo ""
     printf "${C_DIM}Cleaning up session $session_pid${C_RESET}\n"
@@ -70,7 +63,7 @@ shell_cleanup() {
     # 1. READ session manifest - what did WE install?
     if [[ ! -f "$session_manifest" ]]; then
         echo "  No tools installed"
-        rm -rf "$session_dir"
+        rm -rf "$session_dir" "$xdg_dir"
         return 0
     fi
 
@@ -88,7 +81,7 @@ shell_cleanup() {
 
     if [[ ${#session_tools[@]} -eq 0 ]]; then
         echo "  Nothing to remove"
-        rm -rf "$session_dir"
+        rm -rf "$session_dir" "$xdg_dir"
         return 0
     fi
 
@@ -97,15 +90,13 @@ shell_cleanup() {
     local -a to_keep=()
 
     for tool in "${session_tools[@]}"; do
-        local dominated source="${session_sources[$tool]}"
+        local source="${session_sources[$tool]}"
 
-        # Check if other LIVE sessions need this tool
         if master_tool_has_other_live_pids "$tool" "$session_pid"; then
             to_keep+=("$tool (other session)")
             continue
         fi
 
-        # Check if permanently tracked in system manifest
         local tracked_src=$(manifest_get "$tool")
         if [[ -n "$tracked_src" ]]; then
             to_keep+=("$tool (permanent)")
@@ -120,7 +111,7 @@ shell_cleanup() {
         printf "  ${C_DIM}~ %s${C_RESET}\n" "$kept"
     done
 
-    # 3. ATOMIC REMOVAL LOOP
+    # 3. REMOVAL LOOP
     if [[ ${#to_remove[@]} -gt 0 ]]; then
         for tool in "${to_remove[@]}"; do
             local src="${session_sources[$tool]}"
@@ -130,7 +121,7 @@ shell_cleanup() {
             pkg_remove "$tool" "$src" >/dev/null 2>&1 &
             spin_probe "$tool" $!
             if wait $!; then
-                sed -i "/^${tool}:.*:${session_pid}$/d" "$SAT_SHELL_MASTER"
+                /usr/bin/sed -i "/^${tool}:.*:${session_pid}$/d" "$SAT_SHELL_MASTER"
                 printf "  - %-18s [${color}%s${C_RESET}]\n" "$tool" "$display"
             else
                 printf "  ${C_CROSS} %-18s ${C_DIM}(failed)${C_RESET}\n" "$tool"
@@ -140,24 +131,55 @@ shell_cleanup() {
         echo "  Nothing to remove"
     fi
 
-    # 4. DELETE temp session dir
-    rm -rf "$session_dir"
+    # 4. SNAPSHOT-BASED CONFIG CLEANUP (catches legacy tools that ignored XDG)
+    if [[ -f "$snapshot_before" ]]; then
+        cleanup_session_configs "$snapshot_before" "$snapshot_after" "$session_manifest"
+    fi
+
+    # 5. Remove from master manifest
+    master_remove_pid "$session_pid"
+
+    # 6. DELETE session dirs
+    rm -rf "$session_dir" "$xdg_dir"
 }
 
-# Main shell runner
+# =============================================================================
+# MAIN SHELL RUNNER
+# =============================================================================
 sat_shell() {
     local specs=("$@")
+
+    # === HARD TMUX REQUIREMENT ===
+    if ! command -v tmux &>/dev/null; then
+        printf "${C_CROSS} sat shell requires tmux for proper isolation.\n"
+        echo ""
+        echo "Install it with:"
+        echo "  sat install tmux"
+        echo ""
+        return 1
+    fi
 
     if [[ ${#specs[@]} -eq 0 ]]; then
         echo "Usage: sat shell <tool[:source]> [tool2[:source]] ..."
         return 1
     fi
 
-    # Cleanup dead sessions from master manifest
+    # Cleanup dead sessions
     cleanup_master
-    local session_dir="$SAT_RUN_DIR/$$"
+
+    # === PERSISTENT SESSION STORAGE (survives crashes) ===
+    local session_dir="$SAT_SESSIONS_DIR/$$"
     local manifest="$session_dir/manifest"
+    local snapshot_before="$session_dir/snapshot-before.txt"
+
     mkdir -p "$session_dir"
+
+    # === EPHEMERAL XDG STORAGE (in /tmp, wiped on reboot) ===
+    local xdg_dir="/tmp/sat-$$"
+    mkdir -p "$xdg_dir"/{config,data,cache,state}
+
+    # === TAKE SNAPSHOT BEFORE INSTALLATIONS ===
+    take_snapshot "$snapshot_before"
 
     # Check what needs installing (parse specs to get tool names)
     local to_install=()
@@ -169,7 +191,6 @@ sat_shell() {
         local forced_src="$_TOOL_SOURCE"
 
         # If source specified, always install (user wants that specific version)
-        # If no source and tool exists, skip
         if [[ -z "$forced_src" ]] && command -v "$tool" &>/dev/null; then
             already_have+=("$spec")
         else
@@ -190,8 +211,14 @@ RCFILE_START
 
     cat >> "$rcfile" << RCFILE_VARS
 export PS1="(sat) \$PS1"
-export HISTFILE="$session_dir/history"
+export HISTFILE="$xdg_dir/history"
 export SAT_SESSION="$$"
+
+# XDG isolation - tools write configs to temp dirs
+export XDG_CONFIG_HOME="$xdg_dir/config"
+export XDG_DATA_HOME="$xdg_dir/data"
+export XDG_CACHE_HOME="$xdg_dir/cache"
+export XDG_STATE_HOME="$xdg_dir/state"
 
 # Session paths
 SAT_MANIFEST="$manifest"
@@ -227,7 +254,7 @@ echo ""
 for spec in "${SAT_ALREADY_HAVE[@]}"; do
     parse_tool_spec "$spec"
     tool="$_TOOL_NAME"
-    src=$(detect_source "$tool")
+    src=$(resolve_source "$tool" "")
     display=$(source_display "$src")
     light=$(source_light "$src")
     color=$(source_color "$display")
@@ -286,7 +313,7 @@ if [[ ${#SAT_TO_INSTALL[@]} -gt 0 ]]; then
         parse_tool_spec "$spec"
         tool="$_TOOL_NAME"
         if command -v "$tool" &>/dev/null && ! grep -q "^TOOL=$tool$" "$SAT_MANIFEST" 2>/dev/null; then
-            src=$(detect_source "$tool")
+            src=$(resolve_source "$tool" "")
             [[ -z "$src" || "$src" == "unknown" ]] && continue
             display=$(source_display "$src")
             light=$(source_light "$src")
@@ -304,13 +331,9 @@ echo "type 'exit' to leave"
 echo ""
 RCFILE_MAIN
 
-    # Launch shell - tmux for true isolation, fallback otherwise
-    if command -v tmux &>/dev/null; then
-        tmux new-session -s "sat-$$" "bash --rcfile $rcfile"
-    else
-        bash --rcfile "$rcfile"
-    fi
+    # Launch tmux with XDG isolation
+    tmux new-session -s "sat-$$" "bash --rcfile $rcfile"
 
     # Cleanup on exit
-    shell_cleanup "$$" "$session_dir"
+    shell_cleanup "$$" "$session_dir" "$xdg_dir"
 }

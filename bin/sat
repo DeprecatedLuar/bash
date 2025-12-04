@@ -4,7 +4,27 @@
 source "$HOME/.config/bash/modules/universal/paths.sh"
 source "$BASHRC/bin/lib/sat/common.sh"
 
+# Clean up orphaned sessions from crashed sat shells
+cleanup_orphaned_sessions
+
 case "$1" in
+    deps|dependencies)
+        echo "Installing sat dependencies..."
+        echo ""
+        DEPS=(tmux wget curl jq)
+        for dep in "${DEPS[@]}"; do
+            if command -v "$dep" &>/dev/null; then
+                printf "  ${C_CHECK} %s\n" "$dep"
+            else
+                printf "  Installing %s...\n" "$dep"
+                source "$BASHRC/bin/lib/sat/install.sh"
+                sat_install "$dep:sys"
+            fi
+        done
+        echo ""
+        echo "sat is ready to use."
+        ;;
+
     install|i)
         [[ -z "$2" ]] && { echo "Usage: sat install <program> [--rust|--python|--node|--go|--system]"; exit 1; }
         shift
@@ -327,7 +347,8 @@ Commands:
   install|i <pkg>     - Install package(s) with optional source
   search <program>    - Find package across sources (--all raw, --wrap full)
   uninstall|rm <prog> - Remove program installed via sat
-  shell <tool>        - Temp shell with tools, auto-cleanup on exit
+  shell <tool>        - Temp shell with tools, auto-cleanup on exit (requires tmux)
+  deps                - Install sat dependencies (tmux, wget, curl, jq)
   which|whereis <prg> - Show source and path for installed programs
   info <program>      - Detailed info (source, path, version, tracking)
   list|ls             - List tracked packages (auto-cleans stale entries)
