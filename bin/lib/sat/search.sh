@@ -103,10 +103,10 @@ sat_search() {
         fi
     ) > "$tmpdir/brew" 2>/dev/null &
 
-    # Nix packages (experimental nix search - fast, uses cached indexes)
+    # Nix packages (experimental nix search - can be slow on first run)
     (
         if command -v nix &>/dev/null; then
-            nix --extra-experimental-features "nix-command flakes" \
+            timeout 5 nix --extra-experimental-features "nix-command flakes" \
                 search nixpkgs "$QUERY" 2>/dev/null | \
                 sed 's/\x1b\[[0-9;]*m//g' | \
                 awk '/^\* / {

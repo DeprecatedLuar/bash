@@ -430,12 +430,31 @@ try_source() {
     esac
 }
 
+# Bootstrappers - always use sat wrapper (system packages often misconfigured)
+SAT_BOOTSTRAPPERS=(nix homebrew brew rustup)
+
 # Install tool with fallback chain, using spinner
 # Sets global: _INSTALL_SOURCE (source that succeeded)
 # Returns 0 on success, 1 if all sources fail
 install_with_fallback() {
     local tool="$1"
     _INSTALL_SOURCE=""
+
+    # Force sat wrapper for bootstrappers
+    local wrapper_name="$tool"
+    for b in "${SAT_BOOTSTRAPPERS[@]}"; do
+        if [[ "$tool" == "$b" ]]; then
+            # Normalize aliases
+            [[ "$tool" == "brew" ]] && wrapper_name="homebrew"
+            try_source "$wrapper_name" "sat" &
+            spin_probe "$tool" $!
+            if wait $!; then
+                _INSTALL_SOURCE="sat"
+                return 0
+            fi
+            return 1
+        fi
+    done
 
     for source in "${INSTALL_ORDER[@]}"; do
         try_source "$tool" "$source" &
