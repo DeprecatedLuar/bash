@@ -10,7 +10,7 @@ master_add() {
 
 master_remove_pid() {
     local pid="$1"
-    [[ -f "$SAT_SHELL_MASTER" ]] && /usr/bin/sed -i "/:$pid\$/d" "$SAT_SHELL_MASTER"
+    [[ -f "$SAT_SHELL_MASTER" ]] && sed -i "/:$pid\$/d" "$SAT_SHELL_MASTER"
 }
 
 master_tool_has_other_live_pids() {
@@ -121,7 +121,7 @@ shell_cleanup() {
             pkg_remove "$tool" "$src" >/dev/null 2>&1 &
             spin_probe "$tool" $!
             if wait $!; then
-                /usr/bin/sed -i "/^${tool}:.*:${session_pid}$/d" "$SAT_SHELL_MASTER"
+                sed -i "/^${tool}:.*:${session_pid}$/d" "$SAT_SHELL_MASTER"
                 printf "  - %-18s [${color}%s${C_RESET}]\n" "$tool" "$display"
             else
                 printf "  ${C_CROSS} %-18s ${C_DIM}(failed)${C_RESET}\n" "$tool"
