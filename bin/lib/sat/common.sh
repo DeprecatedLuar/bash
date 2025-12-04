@@ -12,7 +12,7 @@ C_REPO=$'\033[38;2;140;140;140m'  # Medium gray - GitHub repos
 C_WRAPPER=$'\033[0;36m'   # Cyan - Sat wrappers
 C_GO=$'\033[0;96m'        # Bright Cyan - Go
 C_BREW=$'\033[0;93m'      # Bright yellow - Homebrew
-C_NIX=$'\033[0;95m'       # Bright magenta - Nix
+C_NIX=$'\033[38;2;82;119;195m'    # Dark blue #5277C3 - Nix
 C_MANUAL=$'\033[38;2;180;140;100m'  # Warm brown - Manual installs
 
 # Desaturated colors (for item names - pastel tints, closer to white)
@@ -23,7 +23,7 @@ C_SYSTEM_L=$'\033[38;2;160;180;220m'  # Soft sky blue
 C_REPO_L=$'\033[38;2;180;180;180m'    # Soft gray
 C_GO_L=$'\033[38;2;160;210;210m'      # Soft teal
 C_BREW_L=$'\033[38;2;230;175;130m'    # Soft amber
-C_NIX_L=$'\033[38;2;200;170;220m'     # Soft lavender
+C_NIX_L=$'\033[38;2;126;186;228m'     # Light blue #7EBAE4
 C_MANUAL_L=$'\033[38;2;210;180;150m'  # Soft tan
 
 # Map source to color
@@ -44,13 +44,16 @@ source_color() {
     esac
 }
 
-# Install fallback order (ecosystem isolation first, system last)
-INSTALL_ORDER=(cargo uv npm system repo wrapper)
+# Install fallback order for permanent installs (system first for stability)
+INSTALL_ORDER=(system brew nix cargo uv npm repo wrapper)
+
+# Install order for sat shell (isolated/user-space first, no sudo preferred)
+SHELL_INSTALL_ORDER=(brew nix cargo uv npm system repo wrapper)
 
 SAT_BASE="https://raw.githubusercontent.com/$GITHUB_USER/the-satellite/main"
 SAT_LOCAL="$PROJECTS/cli/the-satellite"
 SAT_DATA="$HOME/.local/share/sat"
-SAT_MANIFEST="$SAT_DATA/manifest"
+SAT_MANIFEST="${SAT_MANIFEST:-$SAT_DATA/manifest}"
 SAT_SHELL_MASTER="$SAT_DATA/shell-manifest"
 SAT_RUN_DIR="/tmp/sat-shell"
 
@@ -71,7 +74,7 @@ manifest_add() { echo "$1=$2" >> "$SAT_MANIFEST"; }
 manifest_get() { grep "^$1=" "$SAT_MANIFEST" 2>/dev/null | cut -d= -f2; }
 manifest_remove() { sed -i "/^$1=/d" "$SAT_MANIFEST"; }
 
-# Animated status output
+# Animated status output (legacy)
 spin() {
     local msg="$1" pid="$2"
     local dots=""
@@ -83,7 +86,59 @@ spin() {
     done
 }
 
+# Styled spinner: [/] package [source] with colored frames
+spin_with_style() {
+    local program="$1" pid="$2" source="$3"
+    local frames=('|' '/' '-' $'\\')
+    local frame_colors=("$C_RUST" "$C_NODE" "$C_PYTHON" "$C_BREW")
+    local i=0
+    local pkg_color=$(source_light "$source")
+    local src_display=$(source_display "$source")
+    local src_color=$(source_color "$src_display")
+
+    while kill -0 "$pid" 2>/dev/null; do
+        printf "\r[${frame_colors[i]}%s${C_RESET}] ${pkg_color}%s${C_RESET} [${src_color}%s${C_RESET}]" \
+            "${frames[i]}" "$program" "$src_display"
+        i=$(( (i + 1) % 4 ))
+        sleep 0.15
+    done
+    printf "\r%-50s\r" ""
+}
+
+# Spinner without source tag (for searching/probing)
+spin_probe() {
+    local program="$1" pid="$2"
+    local frames=('|' '/' '-' $'\\')
+    local frame_colors=("$C_RUST" "$C_NODE" "$C_PYTHON" "$C_BREW")
+    local i=0
+
+    while kill -0 "$pid" 2>/dev/null; do
+        printf "\r[${frame_colors[i]}%s${C_RESET}] ${C_DIM}%s${C_RESET}" \
+            "${frames[i]}" "$program"
+        i=$(( (i + 1) % 4 ))
+        sleep 0.15
+    done
+    printf "\r%-50s\r" ""
+}
+
+# Checkmark and X for completion status
+C_CHECK=$'\033[0;92m✓\033[0m'  # Green checkmark
+C_CROSS=$'\033[0;91m✗\033[0m'  # Red X
+
 status() { printf "\r%-40s\n" "$1"; }
+
+# Status with checkmark/cross and source tag
+status_ok() {
+    local msg="$1" src="$2"
+    local display=$(source_display "$src")
+    local color=$(source_color "$display")
+    printf "\r[${C_CHECK}] %-25s [${color}%s${C_RESET}]\n" "$msg" "$display"
+}
+
+status_fail() {
+    local msg="$1"
+    printf "\r[${C_CROSS}] %s\n" "$msg"
+}
 
 # Map internal source to display name
 source_display() {
@@ -118,6 +173,29 @@ status_src() {
     local display=$(source_display "$src")
     local color=$(source_color "$display")
     printf "\r%-30s [${color}%s${C_RESET}]\n" "$msg" "$display"
+}
+
+# Parse tool:source syntax (e.g., "ranger:py" -> tool=ranger, source=uv)
+# Sets globals: _TOOL_NAME, _TOOL_SOURCE (empty if no source specified)
+parse_tool_spec() {
+    local spec="$1"
+    if [[ "$spec" == *:* ]]; then
+        _TOOL_NAME="${spec%%:*}"
+        local src="${spec##*:}"
+        case "$src" in
+            py|python)   _TOOL_SOURCE="uv" ;;
+            rs|rust)     _TOOL_SOURCE="cargo" ;;
+            js|node)     _TOOL_SOURCE="npm" ;;
+            sys|system)  _TOOL_SOURCE="system" ;;
+            go)          _TOOL_SOURCE="go" ;;
+            brew)        _TOOL_SOURCE="brew" ;;
+            nix)         _TOOL_SOURCE="nix" ;;
+            *)           _TOOL_SOURCE="$src" ;;
+        esac
+    else
+        _TOOL_NAME="$spec"
+        _TOOL_SOURCE=""
+    fi
 }
 
 # Detect source from binary location (fallback when not in manifests)
@@ -161,6 +239,54 @@ resolve_source() {
     [[ -z "$src" ]] && src="unknown"
 
     echo "$src"
+}
+
+# Find ALL installations of a tool across ecosystems
+# Returns: source:path pairs, one per line (active source first)
+resolve_all_sources() {
+    local tool="$1"
+    local results=()
+    local seen_reals=()
+    local active_bin=$(command -v "$tool" 2>/dev/null)
+    local active_real=""
+    [[ -n "$active_bin" ]] && active_real=$(readlink -f "$active_bin" 2>/dev/null || echo "$active_bin")
+
+    # Define search paths for each ecosystem
+    declare -A eco_paths=(
+        [cargo]="$HOME/.cargo/bin $HOME/.config/bash/dev-tools/cargo/bin"
+        [npm]="$HOME/.config/bash/dev-tools/npm/bin $HOME/.npm-global/bin"
+        [uv]="$HOME/.local/share/uv/tools/*/bin"
+        [go]="$HOME/go/bin $HOME/.config/bash/dev-tools/go/bin"
+        [brew]="/home/linuxbrew/.linuxbrew/bin"
+        [nix]="$HOME/.nix-profile/bin"
+        [system]="/usr/bin /usr/local/bin /usr/games"
+    )
+
+    # Check each ecosystem
+    for src in "${!eco_paths[@]}"; do
+        for dir in ${eco_paths[$src]}; do
+            # Handle glob patterns (for uv)
+            for bin in $dir/$tool; do
+                if [[ -x "$bin" ]]; then
+                    local real=$(readlink -f "$bin" 2>/dev/null || echo "$bin")
+                    # Skip if we've already seen this real path
+                    [[ " ${seen_reals[*]} " =~ " $real " ]] && continue
+                    seen_reals+=("$real")
+
+                    # Check if this is the active one
+                    if [[ -n "$active_real" && "$real" == "$active_real" ]]; then
+                        results=("$src:$bin:active" "${results[@]}")
+                    else
+                        results+=("$src:$bin:shadowed")
+                    fi
+                    break  # Found in this ecosystem, move to next
+                fi
+            done
+        done
+    done
+
+    # Output results
+    printf '%s\n' "${results[@]}"
 }
 
 # Detect package manager based on distro family
@@ -239,7 +365,116 @@ pkg_remove() {
             ;;
         *)       return 1 ;;
     esac
-    # Clear bash hash cache for this command
-    hash -d "$pkg" 2>/dev/null
 }
+
+# === Core Install Functions ===
+
+# Try installing from a specific source (runs synchronously)
+# Returns 0 on success, 1 on failure
+try_source() {
+    local tool="$1" source="$2"
+
+    case "$source" in
+        cargo)
+            command -v cargo &>/dev/null || return 1
+            cargo install "$tool" &>/dev/null
+            ;;
+        uv)
+            command -v uv &>/dev/null || return 1
+            uv tool install "$tool" &>/dev/null
+            ;;
+        npm)
+            command -v npm &>/dev/null || return 1
+            npm show "$tool" >/dev/null 2>&1 || return 1
+            npm install -g "$tool" &>/dev/null
+            ;;
+        go)
+            command -v go &>/dev/null || return 1
+            local go_pkg="$tool"
+            [[ "$go_pkg" != *"."* ]] && go_pkg="github.com/$tool"
+            go install "${go_pkg}@latest" &>/dev/null
+            ;;
+        brew)
+            command -v brew &>/dev/null || return 1
+            brew info "$tool" &>/dev/null 2>&1 || return 1
+            brew install "$tool" &>/dev/null
+            ;;
+        nix)
+            command -v nix-env &>/dev/null || return 1
+            nix-env -iA "nixpkgs.$tool" &>/dev/null
+            ;;
+        system)
+            local mgr=$(get_pkg_manager)
+            [[ -z "$mgr" ]] && return 1
+            pkg_exists "$tool" "$mgr" || return 1
+            pkg_install "$tool" "$mgr" &>/dev/null
+            ;;
+        repo)
+            # Check user's GitHub repo for install.sh
+            local url="https://raw.githubusercontent.com/$GITHUB_USER/$tool/main/install.sh"
+            curl -sSL --fail --head "$url" >/dev/null 2>&1 || {
+                url="https://raw.githubusercontent.com/$GITHUB_USER/$tool/master/install.sh"
+                curl -sSL --fail --head "$url" >/dev/null 2>&1 || return 1
+            }
+            curl -sSL "$url" | bash &>/dev/null
+            ;;
+        wrapper)
+            curl -sSL --fail --head "$SAT_BASE/cargo-bay/programs/${tool}.sh" >/dev/null 2>&1 || return 1
+            source <(curl -sSL "$SAT_BASE/internal/fetcher.sh")
+            sat_init && sat_run "$tool" &>/dev/null
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+# Install tool with fallback chain, using spinner
+# Sets global: _INSTALL_SOURCE (source that succeeded)
+# Returns 0 on success, 1 if all sources fail
+install_with_fallback() {
+    local tool="$1"
+    _INSTALL_SOURCE=""
+
+    for source in "${INSTALL_ORDER[@]}"; do
+        try_source "$tool" "$source" &
+        spin_probe "$tool" $!
+        if wait $!; then
+            _INSTALL_SOURCE="$source"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+# Core dependencies (required for sat to function)
+SAT_DEPS=(jq curl)
+
+# Ensure all dependencies are installed
+ensure_deps() {
+    local missing=()
+    for dep in "${SAT_DEPS[@]}"; do
+        command -v "$dep" &>/dev/null || missing+=("$dep")
+    done
+
+    [[ ${#missing[@]} -eq 0 ]] && return 0
+
+    local mgr=$(get_pkg_manager)
+    if [[ -z "$mgr" ]]; then
+        printf "${C_DIM}sat: missing deps (%s) - install manually${C_RESET}\n" "${missing[*]}" >&2
+        return 1
+    fi
+
+    printf "${C_DIM}sat: installing %s...${C_RESET}\n" "${missing[*]}" >&2
+    for dep in "${missing[@]}"; do
+        pkg_install "$dep" "$mgr" || {
+            printf "${C_DIM}sat: failed to install %s${C_RESET}\n" "$dep" >&2
+            return 1
+        }
+    done
+}
+
+# Run on source
+ensure_deps
 

@@ -21,6 +21,10 @@ case "${1:-}" in
     cpu|ram|gpu|fan|bat)
         "$LIB_DIR/get-system-metrics.sh" "$@"
         ;;
+    hw|hardware)
+        shift
+        "$LIB_DIR/get-hardware-info.sh" "$@"
+        ;;
     "")
         "$LIB_DIR/get-system-metrics.sh"
         ;;

@@ -56,74 +56,100 @@ cleanup_master() {
     fi
 }
 
-# Remove package (shell version - with progress output)
-shell_pkg_remove() {
-    local pkg="$1" source="$2"
-    [[ -z "$source" ]] && return
+# =============================================================================
+# CLEANUP FUNCTION - Called when sat shell exits
+# =============================================================================
+shell_cleanup() {
+    local session_pid="$1"
+    local session_dir="$2"
+    local session_manifest="$session_dir/manifest"
 
-    printf "Removing %s..." "$pkg"
-    pkg_remove "$pkg" "$source" >/dev/null 2>&1
-    printf "\rRemoved %-30s\n" "$pkg"
-}
+    echo ""
+    printf "${C_DIM}Cleaning up session $session_pid${C_RESET}\n"
 
-# Install a single tool, return source on success
-# Follows INSTALL_ORDER from common.sh
-install_tool() {
-    local tool="$1"
-    local pkg_mgr=$(get_pkg_manager)
+    # 1. READ session manifest - what did WE install?
+    if [[ ! -f "$session_manifest" ]]; then
+        echo "  No tools installed"
+        rm -rf "$session_dir"
+        return 0
+    fi
 
-    for source in "${INSTALL_ORDER[@]}"; do
-        case "$source" in
-            cargo)
-                if command -v cargo &>/dev/null && cargo install "$tool" >/dev/null 2>&1; then
-                    echo "cargo"
-                    return 0
-                fi
-                ;;
-            uv)
-                if command -v uv &>/dev/null && uv tool install "$tool" >/dev/null 2>&1; then
-                    echo "uv"
-                    return 0
-                fi
-                ;;
-            npm)
-                if command -v npm &>/dev/null && npm show "$tool" >/dev/null 2>&1; then
-                    if npm install -g "$tool" >/dev/null 2>&1; then
-                        echo "npm"
-                        return 0
-                    fi
-                fi
-                ;;
-            system)
-                if [[ -n "$pkg_mgr" ]] && pkg_exists "$tool" "$pkg_mgr"; then
-                    if pkg_install "$tool" "$pkg_mgr" >/dev/null 2>&1; then
-                        echo "$pkg_mgr"
-                        return 0
-                    fi
-                fi
-                ;;
-            wrapper)
-                if curl -sSL --fail --head "$SAT_BASE/cargo-bay/programs/${tool}.sh" >/dev/null 2>&1; then
-                    source <(curl -sSL "$SAT_BASE/internal/fetcher.sh")
-                    sat_init
-                    if sat_run "$tool" >/dev/null 2>&1; then
-                        echo "wrapper"
-                        return 0
-                    fi
-                fi
-                ;;
-        esac
+    local -a session_tools=()
+    local -A session_sources=()
+
+    while IFS='=' read -r key value; do
+        if [[ "$key" == "TOOL" ]]; then
+            session_tools+=("$value")
+        elif [[ "$key" == SOURCE_* ]]; then
+            local tool="${key#SOURCE_}"
+            session_sources["$tool"]="$value"
+        fi
+    done < "$session_manifest"
+
+    if [[ ${#session_tools[@]} -eq 0 ]]; then
+        echo "  Nothing to remove"
+        rm -rf "$session_dir"
+        return 0
+    fi
+
+    # 2. FILTER - determine what to actually remove
+    local -a to_remove=()
+    local -a to_keep=()
+
+    for tool in "${session_tools[@]}"; do
+        local dominated source="${session_sources[$tool]}"
+
+        # Check if other LIVE sessions need this tool
+        if master_tool_has_other_live_pids "$tool" "$session_pid"; then
+            to_keep+=("$tool (other session)")
+            continue
+        fi
+
+        # Check if permanently tracked in system manifest
+        local tracked_src=$(manifest_get "$tool")
+        if [[ -n "$tracked_src" ]]; then
+            to_keep+=("$tool (permanent)")
+            continue
+        fi
+
+        to_remove+=("$tool")
     done
 
-    return 1
+    # Show what we're keeping
+    for kept in "${to_keep[@]}"; do
+        printf "  ${C_DIM}~ %s${C_RESET}\n" "$kept"
+    done
+
+    # 3. ATOMIC REMOVAL LOOP
+    if [[ ${#to_remove[@]} -gt 0 ]]; then
+        for tool in "${to_remove[@]}"; do
+            local src="${session_sources[$tool]}"
+            local display=$(source_display "$src")
+            local color=$(source_color "$display")
+
+            pkg_remove "$tool" "$src" >/dev/null 2>&1 &
+            spin_probe "$tool" $!
+            if wait $!; then
+                sed -i "/^${tool}:.*:${session_pid}$/d" "$SAT_SHELL_MASTER"
+                printf "  - %-18s [${color}%s${C_RESET}]\n" "$tool" "$display"
+            else
+                printf "  ${C_CROSS} %-18s ${C_DIM}(failed)${C_RESET}\n" "$tool"
+            fi
+        done
+    else
+        echo "  Nothing to remove"
+    fi
+
+    # 4. DELETE temp session dir
+    rm -rf "$session_dir"
 }
 
 # Main shell runner
 sat_shell() {
-    local tools=("$@")
+    local specs=("$@")
 
-    if [[ ${#tools[@]} -eq 0 ]]; then
-        echo "Usage: sat shell <tool> [tool2] [tool3] ..."
+    if [[ ${#specs[@]} -eq 0 ]]; then
+        echo "Usage: sat shell <tool[:source]> [tool2[:source]] ..."
         return 1
     fi
 
@@ -133,124 +159,158 @@ sat_shell() {
     local manifest="$session_dir/manifest"
     mkdir -p "$session_dir"
 
-    # Check what needs installing
+    # Check what needs installing (parse specs to get tool names)
     local to_install=()
     local already_have=()
 
-    echo "Checking tools..."
-    for tool in "${tools[@]}"; do
-        if command -v "$tool" &>/dev/null; then
-            already_have+=("$tool")
+    for spec in "${specs[@]}"; do
+        parse_tool_spec "$spec"
+        local tool="$_TOOL_NAME"
+        local forced_src="$_TOOL_SOURCE"
+
+        # If source specified, always install (user wants that specific version)
+        # If no source and tool exists, skip
+        if [[ -z "$forced_src" ]] && command -v "$tool" &>/dev/null; then
+            already_have+=("$spec")
         else
-            to_install+=("$tool")
+            to_install+=("$spec")
         fi
     done
 
-    # Show plan
-    echo ""
-    echo "=== sat shell ==="
-    [[ ${#already_have[@]} -gt 0 ]] && echo "  Already installed: ${already_have[*]}"
-    [[ ${#to_install[@]} -gt 0 ]] && echo "  Will install: ${to_install[*]}"
-    echo ""
+    # Convert arrays to strings for embedding in rcfile
+    local to_install_str="${to_install[*]}"
+    local already_have_str="${already_have[*]}"
+    local all_specs_str="${specs[*]}"
 
-    # Install missing tools
-    local installed=()
-    for tool in "${to_install[@]}"; do
-        printf "Installing %s..." "$tool"
-        local source=$(install_tool "$tool")
-        if [[ -n "$source" ]]; then
-            local display=$(source_display "$source")
-            local light=$(source_light "$source")
-            local color=$(source_color "$display")
-            printf "\r${light}%-20s${C_RESET} [${color}%s${C_RESET}]\n" "$tool" "$display"
-            echo "TOOL=$tool" >> "$manifest"
-            echo "SOURCE_$tool=$source" >> "$manifest"
-            master_add "$tool" "$source" "$$"
-            installed+=("$tool")
-        else
-            printf "\rFailed %-20s\n" "$tool"
-        fi
-    done
-
-    # Catch dependency-installed tools (requested but installed as deps of other packages)
-    for tool in "${to_install[@]}"; do
-        if command -v "$tool" &>/dev/null && ! grep -q "^TOOL=$tool$" "$manifest" 2>/dev/null; then
-            local src=$(detect_source "$tool")
-            [[ -z "$src" || "$src" == "unknown" ]] && continue
-            local display=$(source_display "$src")
-            local light=$(source_light "$src")
-            local color=$(source_color "$display")
-            printf "${light}%-20s${C_RESET} [${color}%s${C_RESET}] (dependency)\n" "$tool" "$display"
-            echo "TOOL=$tool" >> "$manifest"
-            echo "SOURCE_$tool=$src" >> "$manifest"
-            master_add "$tool" "$src" "$$"
-            installed+=("$tool")
-        fi
-    done
-
-    # Abort if nothing to do
-    if [[ ${#installed[@]} -eq 0 && ${#already_have[@]} -eq 0 ]]; then
-        echo "No tools available"
-        rm -rf "$session_dir"
-        return 1
-    fi
-
-    # Build tool list for display (with colors)
-    # Uses layered source detection: session manifest -> system manifest -> binary path
-    local tool_list=""
-    for tool in "${tools[@]}"; do
-        local src=$(resolve_source "$tool" "$manifest")
-        local display=$(source_display "$src")
-        local light=$(source_light "$src")
-        local color=$(source_color "$display")
-        tool_list+="${light}${tool}${C_RESET} [${color}${display}${C_RESET}]\n"
-    done
-
-    # Launch isolated subshell
-    SAT_SHELL_TOOLS="${tools[*]}" \
-    HISTFILE="$session_dir/history" \
-    bash --rcfile <(cat << EOF
+    # Write rcfile that does install inside tmux
+    local rcfile="$session_dir/rcfile"
+    cat > "$rcfile" << 'RCFILE_START'
 source ~/.bashrc 2>/dev/null
+RCFILE_START
+
+    cat >> "$rcfile" << RCFILE_VARS
 export PS1="(sat) \$PS1"
 export HISTFILE="$session_dir/history"
 export SAT_SESSION="$$"
-clear
-cols=\$(tput cols 2>/dev/null || echo 80)
-header="────[SAT SHELL]"
-pad=\$(printf '─%.0s' \$(seq 1 \$((cols - \${#header}))))
-echo -e "\033[1m\${header}\${pad}\033[0m"
-echo ""
-echo -e "$tool_list"
-echo "type 'exit' to cleanup and leave"
-echo ""
-EOF
-)
 
-    # Cleanup on exit
-    echo ""
-    if [[ -f "$manifest" ]]; then
-        echo "Cleaning up..."
-        while IFS='=' read -r key value; do
-            if [[ "$key" == "TOOL" ]]; then
-                # Skip if another active session needs this tool
-                if master_tool_has_other_live_pids "$value" "$$"; then
-                    printf "Keeping %-25s (used by another session)\n" "$value"
-                    continue
-                fi
-                local src=$(grep "^SOURCE_$value=" "$manifest" | cut -d= -f2)
-                # Skip if permanently tracked with SAME source
-                local tracked_src=$(manifest_get "$value")
-                if [[ -n "$tracked_src" && "$tracked_src" == "$src" ]]; then
-                    printf "Keeping %-25s (permanently tracked)\n" "$value"
-                    continue
-                fi
-                shell_pkg_remove "$value" "$src"
+# Session paths
+SAT_MANIFEST="$manifest"
+SAT_SHELL_MASTER="$SAT_SHELL_MASTER"
+
+# Tool specs (may include :source suffix)
+SAT_TO_INSTALL=($to_install_str)
+SAT_ALREADY_HAVE=($already_have_str)
+SAT_ALL_SPECS=($all_specs_str)
+RCFILE_VARS
+
+    cat >> "$rcfile" << 'RCFILE_MAIN'
+
+# Source sat common for install functions
+source "$HOME/.config/bash/bin/lib/sat/common.sh"
+
+# Use shell-specific install order (no sudo preferred)
+INSTALL_ORDER=("${SHELL_INSTALL_ORDER[@]}")
+
+# Master manifest helper
+_master_add() {
+    echo "$1:$2:$SAT_SESSION" >> "$SAT_SHELL_MASTER"
+}
+
+clear
+cols=$(tput cols 2>/dev/null || echo 80)
+header="────[SAT SHELL]"
+pad=$(printf '─%.0s' $(seq 1 $((cols - ${#header}))))
+echo -e "\033[1m${header}${pad}\033[0m"
+echo ""
+
+# Show already installed tools first (muted)
+for spec in "${SAT_ALREADY_HAVE[@]}"; do
+    parse_tool_spec "$spec"
+    tool="$_TOOL_NAME"
+    src=$(detect_source "$tool")
+    display=$(source_display "$src")
+    light=$(source_light "$src")
+    color=$(source_color "$display")
+    printf "[${C_CHECK}] ${light}%-20s${C_RESET} [${color}%s${C_RESET}] ${C_DIM}(already installed)${C_RESET}\n" "$tool" "$display"
+done
+
+# Install missing tools with animation
+if [[ ${#SAT_TO_INSTALL[@]} -gt 0 ]]; then
+    total=${#SAT_TO_INSTALL[@]}
+
+    # Print initial list
+    for spec in "${SAT_TO_INSTALL[@]}"; do
+        parse_tool_spec "$spec"
+        printf "[ ] %s\n" "$_TOOL_NAME"
+    done
+
+    # Move cursor back up
+    printf "\033[%dA" "$total"
+
+    # Install each tool
+    for spec in "${SAT_TO_INSTALL[@]}"; do
+        parse_tool_spec "$spec"
+        tool="$_TOOL_NAME"
+        forced_src="$_TOOL_SOURCE"
+
+        # Use forced source or fallback chain
+        if [[ -n "$forced_src" ]]; then
+            try_source "$tool" "$forced_src" &
+            spin_probe "$tool" $!
+            if wait $!; then
+                _INSTALL_SOURCE="$forced_src"
+                installed=true
+            else
+                installed=false
             fi
-        done < "$manifest"
-        # Remove our entries from master
-        master_remove_pid "$$"
+        else
+            installed=false
+            install_with_fallback "$tool" && installed=true
+        fi
+
+        if $installed; then
+            display=$(source_display "$_INSTALL_SOURCE")
+            light=$(source_light "$_INSTALL_SOURCE")
+            color=$(source_color "$display")
+            printf "\r[${C_CHECK}] ${light}%-20s${C_RESET} [${color}%s${C_RESET}]\n" "$tool" "$display"
+            echo "TOOL=$tool" >> "$SAT_MANIFEST"
+            echo "SOURCE_$tool=$_INSTALL_SOURCE" >> "$SAT_MANIFEST"
+            _master_add "$tool" "$_INSTALL_SOURCE"
+        else
+            printf "\r[${C_CROSS}] %-20s\n" "$tool"
+        fi
+    done
+
+    # Check for dependency-installed tools
+    for spec in "${SAT_TO_INSTALL[@]}"; do
+        parse_tool_spec "$spec"
+        tool="$_TOOL_NAME"
+        if command -v "$tool" &>/dev/null && ! grep -q "^TOOL=$tool$" "$SAT_MANIFEST" 2>/dev/null; then
+            src=$(detect_source "$tool")
+            [[ -z "$src" || "$src" == "unknown" ]] && continue
+            display=$(source_display "$src")
+            light=$(source_light "$src")
+            color=$(source_color "$display")
+            printf "[${C_CHECK}] ${light}%-20s${C_RESET} [${color}%s${C_RESET}] (dep)\n" "$tool" "$display"
+            echo "TOOL=$tool" >> "$SAT_MANIFEST"
+            echo "SOURCE_$tool=$src" >> "$SAT_MANIFEST"
+            _master_add "$tool" "$src"
+        fi
+    done
+    echo ""
+fi
+
+echo "type 'exit' to leave"
+echo ""
+RCFILE_MAIN
+
+    # Launch shell - tmux for true isolation, fallback otherwise
+    if command -v tmux &>/dev/null; then
+        tmux new-session -s "sat-$$" "bash --rcfile $rcfile"
+    else
+        bash --rcfile "$rcfile"
     fi
 
-    rm -rf "$session_dir"
-    echo "sat shell exited"
+    # Cleanup on exit
+    shell_cleanup "$$" "$session_dir"
 }

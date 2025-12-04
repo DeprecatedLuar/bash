@@ -6,14 +6,10 @@
 
 #--[UTILITIES]----------------------------------
 
-setup_sys_local() {
+setup_sys() {
     local user_dir="$1"
-    local system_dir="$2"
-
     [ -d "$user_dir" ] || return 0
-
     mkdir -p "$user_dir/sys"
-    ln -sfn "$system_dir" "$user_dir/sys/local"
 }
 
 link_contents() {
@@ -31,7 +27,7 @@ link_contents() {
 
 #--[BIN]----------------------------------------
 
-setup_sys_local "$HOME/bin" "/usr/local/bin"
+setup_sys "$HOME/bin"
 ln -sfn "$HOME/.local/bin" "$HOME/bin/local" 2>/dev/null || true
 link_contents "$TOOLS/bin" "$HOME/bin"
 link_contents "$BASHRC/bin" "$HOME/bin"
@@ -41,11 +37,15 @@ link_contents "$BASHRC/bin/lib" "$HOME/bin/lib"
 #--[SYSTEMD]------------------------------------
 
 if [ -d "$HOME/.config/systemd" ]; then
-    setup_sys_local "$HOME/.config/systemd" "/etc/systemd/system"
+    setup_sys "$HOME/.config/systemd"
     [ -L "$HOME/.config/systemd/user" ] || ln -sf . "$HOME/.config/systemd/user"
 fi
 
 #--[AUTOSTART]----------------------------------
 
-setup_sys_local "$HOME/.config/autostart" "/etc/xdg/autostart"
+setup_sys "$HOME/.config/autostart"
+
+#--[XDG]----------------------------------------
+
+ln -sf "$BASHRC/modules/universal/xdg.sh" "$HOME/.config/user-dirs.dirs"
 

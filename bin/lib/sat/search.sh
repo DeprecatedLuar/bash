@@ -62,14 +62,14 @@ sat_search() {
 
     # === Phase 1: Run searches in parallel ===
 
-    # System package manager (local)
+    # System package manager (local) - fetch more results, filter narrows them down
     (
         if [[ -n "$PKG_MGR" ]]; then
             case "$PKG_MGR" in
-                apt) apt-cache search "$QUERY" 2>/dev/null | head -5 ;;
-                pacman) pacman -Ss "$QUERY" 2>/dev/null | grep -A1 "^[^ ]" | head -10 ;;
-                apk) apk search "$QUERY" 2>/dev/null | head -5 ;;
-                dnf) dnf search "$QUERY" 2>/dev/null | grep -v "^=" | head -5 ;;
+                apt) apt-cache search "$QUERY" 2>/dev/null | head -30 ;;
+                pacman) pacman -Ss "$QUERY" 2>/dev/null | grep -A1 "^[^ ]" | head -30 ;;
+                apk) apk search "$QUERY" 2>/dev/null | head -30 ;;
+                dnf) dnf search "$QUERY" 2>/dev/null | grep -v "^=" | head -30 ;;
             esac
         fi
     ) > "$tmpdir/system" 2>/dev/null &
@@ -102,6 +102,25 @@ sat_search() {
             echo "$info" | jq -r '"\(.name) \(.versions.stable) - \(.desc // "" | split("\n")[0])"' 2>/dev/null
         fi
     ) > "$tmpdir/brew" 2>/dev/null &
+
+    # Nix packages (experimental nix search - fast, uses cached indexes)
+    (
+        if command -v nix &>/dev/null; then
+            nix --extra-experimental-features "nix-command flakes" \
+                search nixpkgs "$QUERY" 2>/dev/null | \
+                sed 's/\x1b\[[0-9;]*m//g' | \
+                awk '/^\* / {
+                    split($2, parts, ".")
+                    pkg = parts[length(parts)]
+                    ver = $3
+                    gsub(/[()]/, "", ver)
+                    getline
+                    desc = $0
+                    gsub(/^[[:space:]]+/, "", desc)
+                    print pkg, ver, "-", desc
+                }' | head -10
+        fi
+    ) > "$tmpdir/nix" 2>/dev/null &
 
     wait
 
@@ -147,10 +166,10 @@ sat_search() {
     printf "%s%s\n\n" "$header" "$(printf '─%.0s' $(seq 1 $padding))"
 
     # Map search source names to colors (header and item)
-    declare -A color_map=([system]="apt" [rust]="cargo" [python]="uv" [node]="npm" [github]="repo" [brew]="brew")
-    declare -A light_map=([system]="$C_SYSTEM_L" [rust]="$C_RUST_L" [python]="$C_PYTHON_L" [node]="$C_NODE_L" [github]="$C_REPO_L" [brew]="$C_BREW_L")
+    declare -A color_map=([system]="apt" [rust]="cargo" [python]="uv" [node]="npm" [github]="repo" [brew]="brew" [nix]="nix")
+    declare -A light_map=([system]="$C_SYSTEM_L" [rust]="$C_RUST_L" [python]="$C_PYTHON_L" [node]="$C_NODE_L" [github]="$C_REPO_L" [brew]="$C_BREW_L" [nix]="$C_NIX_L")
 
-    for source in system brew rust python node github; do
+    for source in system brew nix rust python node github; do
         if [[ -s "$tmpdir/$source" ]]; then
             # Apply relevance filter if enabled
             local filtered="$tmpdir/${source}_filtered"

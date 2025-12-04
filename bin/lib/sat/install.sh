@@ -1,202 +1,189 @@
 #!/usr/bin/env bash
 # sat install - install programs from various sources
 
-sat_install() {
-    local PKG_MGR=$(get_pkg_manager)
-    local FORCE_SOURCE=""
-    local PROGRAMS=()
+# Download and install binary from GitHub releases
+# Usage: install_from_release <user/repo> <repo_name>
+install_from_release() {
+    local repo_path="$1" repo_name="$2"
+    local os arch base_url tmpdir
 
-    # Parse flags
+    # Detect OS/arch
+    case "$(uname -s)" in
+        Linux*)  os="linux" ;;
+        Darwin*) os="darwin" ;;
+        *)       return 1 ;;
+    esac
+    case "$(uname -m)" in
+        x86_64)  arch="amd64" ;;
+        aarch64) arch="arm64" ;;
+        armv7l)  arch="arm" ;;
+        *)       return 1 ;;
+    esac
+
+    base_url="https://github.com/$repo_path/releases/latest/download"
+    tmpdir=$(mktemp -d)
+    mkdir -p "$HOME/.local/bin"
+
+    # Try common naming patterns (first hit wins)
+    local patterns=(
+        "$repo_name-$os-$arch"
+        "$repo_name-${os}-${arch}.tar.gz"
+        "$repo_name-${os}-${arch}.zip"
+        "${repo_name}_${os}_${arch}"
+        "${repo_name}_${os}_${arch}.tar.gz"
+        "$repo_name-$os-x86_64"
+        "${repo_name}-${os}-x86_64.tar.gz"
+    )
+
+    local asset_name=""
+    for pattern in "${patterns[@]}"; do
+        if wget -q --spider "$base_url/$pattern" 2>/dev/null; then
+            asset_name="$pattern"
+            break
+        fi
+    done
+
+    [[ -z "$asset_name" ]] && { rm -rf "$tmpdir"; return 1; }
+
+    # Download
+    wget -q -O "$tmpdir/$asset_name" "$base_url/$asset_name" || { rm -rf "$tmpdir"; return 1; }
+
+    # Extract or install directly
+    case "$asset_name" in
+        *.tar.gz|*.tgz)
+            tar -xzf "$tmpdir/$asset_name" -C "$tmpdir"
+            ;;
+        *.zip)
+            unzip -q "$tmpdir/$asset_name" -d "$tmpdir" 2>/dev/null
+            ;;
+        *)
+            # Raw binary
+            chmod +x "$tmpdir/$asset_name"
+            mv "$tmpdir/$asset_name" "$HOME/.local/bin/$repo_name"
+            rm -rf "$tmpdir"
+            return 0
+            ;;
+    esac
+
+    # Find the binary in extracted files
+    local binary
+    binary=$(find "$tmpdir" -type f -name "$repo_name" 2>/dev/null | head -1)
+    [[ -z "$binary" ]] && binary=$(find "$tmpdir" -type f -executable ! -name "*.sh" 2>/dev/null | head -1)
+
+    if [[ -n "$binary" ]]; then
+        chmod +x "$binary"
+        mv "$binary" "$HOME/.local/bin/$repo_name"
+        rm -rf "$tmpdir"
+        return 0
+    fi
+
+    rm -rf "$tmpdir"
+    return 1
+}
+
+sat_install() {
+    local DEFAULT_SOURCE=""
+    local -a SPECS=()
+
+    # Parse args: flags set default source, others are tool specs
     for arg in "$@"; do
         case "$arg" in
-            --system) FORCE_SOURCE="system" ;;
-            --rust)   FORCE_SOURCE="cargo" ;;
-            --python) FORCE_SOURCE="uv" ;;
-            --node)   FORCE_SOURCE="npm" ;;
-            --go)     FORCE_SOURCE="go" ;;
-            *)        PROGRAMS+=("$arg") ;;
+            --system|--sys) DEFAULT_SOURCE="system" ;;
+            --rust|--rs)    DEFAULT_SOURCE="cargo" ;;
+            --python|--py)  DEFAULT_SOURCE="uv" ;;
+            --node|--js)    DEFAULT_SOURCE="npm" ;;
+            --go)           DEFAULT_SOURCE="go" ;;
+            --brew)         DEFAULT_SOURCE="brew" ;;
+            --nix)          DEFAULT_SOURCE="nix" ;;
+            *)              SPECS+=("$arg") ;;
         esac
     done
 
-    for PROGRAM in "${PROGRAMS[@]}"; do
+    for SPEC in "${SPECS[@]}"; do
+        # Parse tool:source syntax
+        parse_tool_spec "$SPEC"
+        local PROGRAM="$_TOOL_NAME"
+        local FORCE_SOURCE="${_TOOL_SOURCE:-$DEFAULT_SOURCE}"
         # Handle GitHub repo format (user/repo)
         if [[ "$PROGRAM" == */* ]]; then
             local REPO_PATH="$PROGRAM"
             local REPO_NAME="${PROGRAM##*/}"
 
-            printf "Installing %s" "$REPO_NAME"
-
-            # Try install.sh first
+            # Try install.sh (main branch)
             local INSTALL_URL="https://raw.githubusercontent.com/$REPO_PATH/main/install.sh"
             curl -sSL --fail --head "$INSTALL_URL" >/dev/null 2>&1 &
-            spin "Installing $REPO_NAME" $!
+            spin_with_style "$REPO_NAME" $! "repo"
             if wait $!; then
-                printf "\r"
                 curl -sSL "$INSTALL_URL" | bash
                 manifest_add "$REPO_NAME" "repo:$REPO_PATH"
-                status_src "$REPO_NAME installed" "repo"
+                status_ok "$REPO_NAME" "repo"
                 continue
             fi
 
             # Try master branch
             INSTALL_URL="https://raw.githubusercontent.com/$REPO_PATH/master/install.sh"
             curl -sSL --fail --head "$INSTALL_URL" >/dev/null 2>&1 &
-            spin "Installing $REPO_NAME" $!
+            spin_with_style "$REPO_NAME" $! "repo"
             if wait $!; then
-                printf "\r"
                 curl -sSL "$INSTALL_URL" | bash
                 manifest_add "$REPO_NAME" "repo:$REPO_PATH"
-                status_src "$REPO_NAME installed" "repo"
+                status_ok "$REPO_NAME" "repo"
                 continue
             fi
 
-            status "$REPO_NAME install.sh not found"
+            # Try GitHub releases (download binary)
+            install_from_release "$REPO_PATH" "$REPO_NAME" &
+            spin_with_style "$REPO_NAME" $! "repo"
+            if wait $!; then
+                manifest_add "$REPO_NAME" "repo:$REPO_PATH"
+                status_ok "$REPO_NAME" "repo"
+                continue
+            fi
+
+            # Try go install
+            if command -v go &>/dev/null; then
+                go install "github.com/$REPO_PATH@latest" &>/dev/null &
+                spin_with_style "$REPO_NAME" $! "go"
+                if wait $!; then
+                    manifest_add "$REPO_NAME" "go:github.com/$REPO_PATH"
+                    status_ok "$REPO_NAME" "go"
+                    continue
+                fi
+            fi
+
+            status_fail "$REPO_NAME not found"
             continue
         fi
 
-        # 0. Check if already installed (skip if forcing)
+        # Check if already installed (skip if forcing)
         if [[ -z "$FORCE_SOURCE" ]] && command -v "$PROGRAM" &>/dev/null; then
-            status "$PROGRAM already installed"
+            local existing_src=$(detect_source "$PROGRAM")
+            local display=$(source_display "$existing_src")
+            local color=$(source_color "$display")
+            printf "%-30s [${color}%s${C_RESET}]\n" "$PROGRAM already installed" "$display"
+            printf "  ${C_DIM}Use $PROGRAM:sys :brew :nix :rs :py :js :go to force${C_RESET}\n"
             continue
         fi
-
-        printf "Installing %s" "$PROGRAM"
 
         # Forced source install
         if [[ -n "$FORCE_SOURCE" ]]; then
-            case "$FORCE_SOURCE" in
-                system)
-                    if [[ -n "$PKG_MGR" ]] && pkg_exists "$PROGRAM" "$PKG_MGR"; then
-                        pkg_install "$PROGRAM" "$PKG_MGR" && manifest_add "$PROGRAM" "$PKG_MGR"
-                        status_src "$PROGRAM installed" "$PKG_MGR"
-                    else
-                        status "$PROGRAM not found in $PKG_MGR"
-                    fi
-                    ;;
-                cargo)
-                    cargo install "$PROGRAM" &>/dev/null &
-                    spin "Installing $PROGRAM" $!
-                    if wait $!; then
-                        manifest_add "$PROGRAM" "cargo"
-                        status_src "$PROGRAM installed" "cargo"
-                    else
-                        status "$PROGRAM not found in cargo"
-                    fi
-                    ;;
-                uv)
-                    uv tool install "$PROGRAM" &>/dev/null &
-                    spin "Installing $PROGRAM" $!
-                    if wait $!; then
-                        manifest_add "$PROGRAM" "uv"
-                        status_src "$PROGRAM installed" "uv"
-                    else
-                        status "$PROGRAM not found in uv"
-                    fi
-                    ;;
-                npm)
-                    npm install -g "$PROGRAM" &>/dev/null &
-                    spin "Installing $PROGRAM" $!
-                    if wait $!; then
-                        manifest_add "$PROGRAM" "npm"
-                        status_src "$PROGRAM installed" "npm"
-                    else
-                        status "$PROGRAM not found in npm"
-                    fi
-                    ;;
-                go)
-                    # Go requires full module path (github.com/user/repo or user/repo)
-                    local GO_PKG="$PROGRAM"
-                    [[ "$GO_PKG" != *"."* ]] && GO_PKG="github.com/$PROGRAM"
-                    go install "${GO_PKG}@latest" &>/dev/null &
-                    spin "Installing $PROGRAM" $!
-                    if wait $!; then
-                        manifest_add "${PROGRAM##*/}" "go:$GO_PKG"
-                        status_src "${PROGRAM##*/} installed" "go"
-                    else
-                        status "$PROGRAM not found in go"
-                    fi
-                    ;;
-            esac
+            try_source "$PROGRAM" "$FORCE_SOURCE" &
+            spin_with_style "$PROGRAM" $! "$FORCE_SOURCE"
+            if wait $!; then
+                manifest_add "$PROGRAM" "$FORCE_SOURCE"
+                status_ok "$PROGRAM" "$FORCE_SOURCE"
+            else
+                status_fail "$PROGRAM not found in $(source_display "$FORCE_SOURCE")"
+            fi
             continue
         fi
 
-        # === Fallback chain: follows INSTALL_ORDER from common.sh ===
-        local installed=false
-
-        for source in "${INSTALL_ORDER[@]}"; do
-            $installed && break
-
-            case "$source" in
-                cargo)
-                    if command -v cargo &>/dev/null; then
-                        cargo install "$PROGRAM" &>/dev/null &
-                        spin "Installing $PROGRAM" $!
-                        if wait $!; then
-                            manifest_add "$PROGRAM" "cargo"
-                            status_src "$PROGRAM installed" "cargo"
-                            installed=true
-                        fi
-                    fi
-                    ;;
-                uv)
-                    if command -v uv &>/dev/null; then
-                        uv tool install "$PROGRAM" &>/dev/null &
-                        spin "Installing $PROGRAM" $!
-                        if wait $!; then
-                            manifest_add "$PROGRAM" "uv"
-                            status_src "$PROGRAM installed" "uv"
-                            installed=true
-                        fi
-                    fi
-                    ;;
-                npm)
-                    if command -v npm &>/dev/null && npm show "$PROGRAM" >/dev/null 2>&1; then
-                        npm install -g "$PROGRAM" &>/dev/null &
-                        spin "Installing $PROGRAM" $!
-                        if wait $!; then
-                            manifest_add "$PROGRAM" "npm"
-                            status_src "$PROGRAM installed" "npm"
-                            installed=true
-                        fi
-                    fi
-                    ;;
-                system)
-                    if [[ -n "$PKG_MGR" ]] && pkg_exists "$PROGRAM" "$PKG_MGR"; then
-                        status "$PROGRAM found in $PKG_MGR"
-                        if pkg_install "$PROGRAM" "$PKG_MGR"; then
-                            manifest_add "$PROGRAM" "$PKG_MGR"
-                            status_src "$PROGRAM installed" "$PKG_MGR"
-                            installed=true
-                        fi
-                    fi
-                    ;;
-                repo)
-                    curl -sSL --fail --head "https://raw.githubusercontent.com/$GITHUB_USER/$PROGRAM/main/install.sh" >/dev/null 2>&1 &
-                    spin "Installing $PROGRAM" $!
-                    if wait $!; then
-                        printf "\r"
-                        curl -sSL "https://raw.githubusercontent.com/$GITHUB_USER/$PROGRAM/main/install.sh" | bash
-                        manifest_add "$PROGRAM" "repo"
-                        status_src "$PROGRAM installed" "repo"
-                        installed=true
-                    fi
-                    ;;
-                wrapper)
-                    curl -sSL --fail --head "$SAT_BASE/cargo-bay/programs/${PROGRAM}.sh" >/dev/null 2>&1 &
-                    spin "Installing $PROGRAM" $!
-                    if wait $!; then
-                        printf "\r"
-                        source <(curl -sSL "$SAT_BASE/internal/fetcher.sh")
-                        sat_init
-                        sat_run "$PROGRAM"
-                        manifest_add "$PROGRAM" "wrapper"
-                        status_src "$PROGRAM installed" "wrapper"
-                        installed=true
-                    fi
-                    ;;
-            esac
-        done
-
-        $installed || status "$PROGRAM not found"
+        # Fallback chain
+        if install_with_fallback "$PROGRAM"; then
+            manifest_add "$PROGRAM" "$_INSTALL_SOURCE"
+            status_ok "$PROGRAM" "$_INSTALL_SOURCE"
+        else
+            status_fail "$PROGRAM not found"
+        fi
     done
 }

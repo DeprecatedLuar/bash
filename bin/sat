@@ -41,11 +41,13 @@ case "$1" in
             printf "Removing %s\n" "$PROGRAM"
             if pkg_remove "$PROGRAM" "$SOURCE"; then
                 [[ "$TRACKED" == true ]] && manifest_remove "$PROGRAM"
-                status_src "$PROGRAM removed" "$SOURCE"
+                status_ok "$PROGRAM removed" "$SOURCE"
             else
-                status "$PROGRAM removal failed"
+                status_fail "$PROGRAM removal failed"
             fi
         done
+        # Clear stale hash entries
+        hash -r
         ;;
 
     shell)
@@ -251,16 +253,30 @@ case "$1" in
         [[ -z "$2" ]] && { echo "Usage: sat which <program> [program2] ..."; exit 1; }
         shift
         for prog in "$@"; do
-            bin=$(command -v "$prog" 2>/dev/null)
-            if [[ -z "$bin" ]]; then
+            # Get all installations
+            all_sources=$(resolve_all_sources "$prog")
+            if [[ -z "$all_sources" ]]; then
                 echo "$prog: not found"
                 continue
             fi
-            src=$(resolve_source "$prog" "")
-            display=$(source_display "$src")
-            color=$(source_color "$display")
-            light=$(source_light "$src")
-            printf "${light}%-15s${C_RESET} [${color}%s${C_RESET}] %s\n" "$prog" "$display" "$bin"
+
+            first=true
+            while IFS=: read -r src path status; do
+                display=$(source_display "$src")
+                color=$(source_color "$display")
+                light=$(source_light "$src")
+
+                if [[ "$status" == "active" ]]; then
+                    printf "${light}%-15s${C_RESET} [${color}%s${C_RESET}] %s ${C_DIM}← active${C_RESET}\n" "$prog" "$display" "$path"
+                else
+                    if $first; then
+                        printf "${light}%-15s${C_RESET} [${color}%s${C_RESET}] %s\n" "$prog" "$display" "$path"
+                    else
+                        printf "${C_DIM}%-15s [%s] %s (shadowed)${C_RESET}\n" "" "$display" "$path"
+                    fi
+                fi
+                first=false
+            done <<< "$all_sources"
         done
         ;;
 
@@ -308,7 +324,7 @@ case "$1" in
    '--------------'
 
 Commands:
-  install|i <program> - Install (system > repo > rust > python > node > wrapper)
+  install|i <pkg>     - Install package(s) with optional source
   search <program>    - Find package across sources (--all raw, --wrap full)
   uninstall|rm <prog> - Remove program installed via sat
   shell <tool>        - Temp shell with tools, auto-cleanup on exit
@@ -321,12 +337,18 @@ Commands:
   clone <repo> [dest] - Clone your repo
   update              - Pull latest bash config
 
-Flags for install:
-  --system            - Force system package manager (apt/pacman/etc)
-  --rust              - Force cargo install
-  --python            - Force uv/pip install
-  --node              - Force npm install
-  --go                - Force go install (requires user/repo or full path)
+Source syntax (install/shell):
+  pkg:sys             - System package manager (apt/pacman/etc)
+  pkg:brew            - Homebrew
+  pkg:nix             - Nix profile
+  pkg:rs :rust        - Cargo (Rust)
+  pkg:py :python      - uv (Python)
+  pkg:js :node        - npm (Node)
+  pkg:go              - go install
+
+Examples:
+  sat install fd:rs bat:rs ripgrep:rs
+  sat shell hyperfine:brew cowsay:sys jq
 EOF
         ;;
 esac
