@@ -72,7 +72,7 @@ fi
 # Manifest helpers
 manifest_add() { echo "$1=$2" >> "$SAT_MANIFEST"; }
 manifest_get() { grep "^$1=" "$SAT_MANIFEST" 2>/dev/null | cut -d= -f2; }
-manifest_remove() { /usr/bin/sed -i "/^$1=/d" "$SAT_MANIFEST"; }
+manifest_remove() { sed -i "/^$1=/d" "$SAT_MANIFEST"; }
 
 # Animated status output (legacy)
 spin() {
