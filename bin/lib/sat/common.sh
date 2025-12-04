@@ -47,8 +47,8 @@ source_color() {
 # Install fallback order for permanent installs (system first for stability)
 INSTALL_ORDER=(system brew nix cargo uv npm repo wrapper)
 
-# Install order for sat shell (isolated/user-space first, no sudo preferred)
-SHELL_INSTALL_ORDER=(brew nix cargo uv npm system repo wrapper)
+# Install order for sat shell (isolated/user-space first, system before npm)
+SHELL_INSTALL_ORDER=(brew nix cargo uv system npm repo wrapper)
 
 SAT_BASE="https://raw.githubusercontent.com/$GITHUB_USER/the-satellite/main"
 SAT_LOCAL="$PROJECTS/cli/the-satellite"
@@ -214,7 +214,7 @@ detect_source() {
         */.local/share/uv/tools/*) echo "uv" ;;
         */linuxbrew/*|*/homebrew/*)              echo "brew" ;;
         /nix/store/*|*/.nix-profile/*)           echo "nix" ;;
-        /usr/bin/*|/bin/*|/usr/local/bin/*|/usr/games/*) echo "system" ;;
+        /usr/bin/*|/bin/*|/usr/local/bin/*|/usr/games/*|/sbin/*|/usr/sbin/*) echo "system" ;;
         */.local/opt/*)                          echo "manual" ;;
         *)                                       echo "unknown" ;;
     esac
@@ -386,7 +386,8 @@ try_source() {
         npm)
             command -v npm &>/dev/null || return 1
             npm show "$tool" >/dev/null 2>&1 || return 1
-            npm install -g "$tool" &>/dev/null
+            npm install -g "$tool" &>/dev/null || return 1
+            command -v "$tool" &>/dev/null  # Verify binary exists
             ;;
         go)
             command -v go &>/dev/null || return 1

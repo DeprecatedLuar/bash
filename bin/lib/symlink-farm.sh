@@ -25,6 +25,28 @@ link_contents() {
     done
 }
 
+link_contents_sudo() {
+    local source_dir="$1"
+    local target_dir="$2"
+
+    [ -d "$source_dir" ] || return 0
+
+    for item in "$source_dir"/*; do
+        [ -e "$item" ] || continue
+        [ -d "$item" ] && continue
+        sudo ln -sf "$item" "$target_dir/$(basename "$item")"
+    done
+}
+
+sync_system_links() {
+    link_contents_sudo "$HOME/bin/sys" "/usr/local/bin"
+    link_contents_sudo "/home/linuxbrew/.linuxbrew/bin" "/usr/local/bin"
+    link_contents_sudo "$HOME/.config/systemd/sys" "/etc/systemd/system"
+    link_contents_sudo "$HOME/.config/autostart/sys" "/etc/xdg/autostart"
+    link_contents_sudo "$HOME/.local/share/applications/sys" "/usr/share/applications"
+    sudo systemctl daemon-reload
+}
+
 #--[BIN]----------------------------------------
 
 setup_sys "$HOME/bin"
