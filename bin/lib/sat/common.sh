@@ -9,7 +9,7 @@ C_NODE=$'\033[0;92m'      # Bright green - Node/npm
 C_PYTHON=$'\033[0;94m'    # Blue - Python/uv
 C_SYSTEM=$'\033[0;97m'    # Bright white - System packages
 C_REPO=$'\033[38;2;140;140;140m'  # Medium gray - GitHub repos
-C_WRAPPER=$'\033[0;36m'   # Cyan - Sat wrappers
+C_SAT=$'\033[0;36m'       # Cyan - Sat scripts
 C_GO=$'\033[0;96m'        # Bright Cyan - Go
 C_BREW=$'\033[0;93m'      # Bright yellow - Homebrew
 C_NIX=$'\033[38;2;82;119;195m'    # Dark blue #5277C3 - Nix
@@ -34,7 +34,7 @@ source_color() {
         uv|pip|python)               printf '%s' "$C_PYTHON" ;;
         apt|apk|pacman|dnf|pkg|system) printf '%s' "$C_SYSTEM" ;;
         repo|repo:*)                 printf '%s' "$C_REPO" ;;
-        wrapper)                     printf '%s' "$C_WRAPPER" ;;
+        sat)                         printf '%s' "$C_SAT" ;;
         go|go:*)                     printf '%s' "$C_GO" ;;
         brew)                        printf '%s' "$C_BREW" ;;
         nix)                         printf '%s' "$C_NIX" ;;
@@ -45,10 +45,10 @@ source_color() {
 }
 
 # Install fallback order for permanent installs (system first for stability)
-INSTALL_ORDER=(system brew nix cargo uv npm repo wrapper)
+INSTALL_ORDER=(system brew nix cargo uv npm repo sat)
 
 # Install order for sat shell (isolated/user-space first, system before npm)
-SHELL_INSTALL_ORDER=(brew nix cargo uv system npm repo wrapper)
+SHELL_INSTALL_ORDER=(brew nix cargo uv system npm repo sat)
 
 SAT_BASE="https://raw.githubusercontent.com/DeprecatedLuar/the-satellite/main"
 SAT_LOCAL="$PROJECTS/cli/the-satellite"
@@ -157,7 +157,7 @@ source_light() {
         uv|pip|python)                 printf '%s' "$C_PYTHON_L" ;;
         cargo|rust)                    printf '%s' "$C_RUST_L" ;;
         apt|apk|pacman|dnf|pkg|system) printf '%s' "$C_SYSTEM_L" ;;
-        wrapper|repo|repo:*)           printf '%s' "$C_REPO_L" ;;
+        sat|repo|repo:*)               printf '%s' "$C_REPO_L" ;;
         go|go:*)                       printf '%s' "$C_GO_L" ;;
         brew)                          printf '%s' "$C_BREW_L" ;;
         nix)                           printf '%s' "$C_NIX_L" ;;
@@ -314,7 +314,7 @@ pkg_exists() {
     local pkg="$1" mgr="$2"
     case "$mgr" in
         apt)    apt-cache show "$pkg" &>/dev/null ;;
-        apk)    apk info -e "$pkg" &>/dev/null ;;
+        apk)    apk search -e "$pkg" | grep -q "^${pkg}-" ;;
         pacman) pacman -Si "$pkg" &>/dev/null ;;
         dnf)    dnf info "$pkg" &>/dev/null ;;
         pkg)    pkg search -e "^${pkg}$" &>/dev/null ;;
@@ -354,7 +354,7 @@ pkg_remove() {
         go:*)    rm -f "$GOPATH/bin/$pkg" "$HOME/go/bin/$pkg" 2>/dev/null ;;
         brew)    brew uninstall "$pkg" ;;
         nix)     nix-env --uninstall "$pkg" 2>/dev/null || nix profile remove "$pkg" ;;
-        wrapper) rm -f "$HOME/.local/bin/$pkg" ;;
+        sat) rm -f "$HOME/.local/bin/$pkg" ;;
         repo)    rm -f "$HOME/.local/bin/$pkg" ;;
         repo:*)  rm -f "$HOME/.local/bin/$pkg" ;;
         system)  # Generic system - detect package manager
@@ -419,7 +419,7 @@ try_source() {
             }
             curl -sSL "$url" | bash &>/dev/null
             ;;
-        wrapper)
+        sat)
             curl -sSL --fail --head "$SAT_BASE/cargo-bay/programs/${tool}.sh" >/dev/null 2>&1 || return 1
             source <(curl -sSL "$SAT_BASE/internal/fetcher.sh")
             sat_init && sat_run "$tool" &>/dev/null
