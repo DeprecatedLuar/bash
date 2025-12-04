@@ -50,7 +50,7 @@ INSTALL_ORDER=(system brew nix cargo uv npm repo wrapper)
 # Install order for sat shell (isolated/user-space first, system before npm)
 SHELL_INSTALL_ORDER=(brew nix cargo uv system npm repo wrapper)
 
-SAT_BASE="https://raw.githubusercontent.com/$GITHUB_USER/the-satellite/main"
+SAT_BASE="https://raw.githubusercontent.com/DeprecatedLuar/the-satellite/main"
 SAT_LOCAL="$PROJECTS/cli/the-satellite"
 SAT_DATA="$HOME/.local/share/sat"
 SAT_MANIFEST="${SAT_MANIFEST:-$SAT_DATA/manifest}"
