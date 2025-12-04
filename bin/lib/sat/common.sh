@@ -422,7 +422,7 @@ try_source() {
         sat)
             curl -sSL --fail --head "$SAT_BASE/cargo-bay/programs/${tool}.sh" >/dev/null 2>&1 || return 1
             source <(curl -sSL "$SAT_BASE/internal/fetcher.sh")
-            sat_init && sat_run "$tool" &>/dev/null
+            sat_init && sat_run "$tool"
             ;;
         *)
             return 1
@@ -440,15 +440,12 @@ install_with_fallback() {
     local tool="$1"
     _INSTALL_SOURCE=""
 
-    # Force sat wrapper for bootstrappers
+    # Force sat wrapper for bootstrappers (run foreground - needs interactive prompts)
     local wrapper_name="$tool"
     for b in "${SAT_BOOTSTRAPPERS[@]}"; do
         if [[ "$tool" == "$b" ]]; then
-            # Normalize aliases
             [[ "$tool" == "brew" ]] && wrapper_name="homebrew"
-            try_source "$wrapper_name" "sat" &
-            spin_probe "$tool" $!
-            if wait $!; then
+            if try_source "$wrapper_name" "sat"; then
                 _INSTALL_SOURCE="sat"
                 return 0
             fi
