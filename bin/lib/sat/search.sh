@@ -88,7 +88,7 @@ sat_search() {
         fi
     ) > "$tmpdir/brew" 2>/dev/null &
 
-    # Nix: use NixOS Elasticsearch API (faster & more reliable than local nix search)
+    # Nix: use NixOS Elasticsearch API (public read-only credentials)
     (
         curl -sS "https://aWVSALXpZv:X8gPHnzL52wFEekuxsfQ9cSh@nixos-search-7-1733963800.us-east-1.bonsaisearch.net/latest-*/_search" \
             -H "Content-Type: application/json" \

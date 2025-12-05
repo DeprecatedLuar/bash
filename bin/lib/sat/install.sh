@@ -1,6 +1,26 @@
 #!/usr/bin/env bash
 # sat install - install programs from various sources
 
+# Check if GitHub repo is a Python project and install via uv
+install_python_from_github() {
+    local repo_path="$1" repo_name="$2"
+
+    # Check for Python project markers
+    local has_python=false
+    for file in pyproject.toml setup.py setup.cfg; do
+        if curl -sSL --fail --head "https://raw.githubusercontent.com/$repo_path/main/$file" >/dev/null 2>&1 ||
+           curl -sSL --fail --head "https://raw.githubusercontent.com/$repo_path/master/$file" >/dev/null 2>&1; then
+            has_python=true
+            break
+        fi
+    done
+
+    [[ "$has_python" == false ]] && return 1
+    command -v uv &>/dev/null || return 1
+
+    uv tool install "git+https://github.com/$repo_path" 2>/dev/null
+}
+
 install_from_release() {
     local repo_path="$1" repo_name="$2"
     local os arch base_url tmpdir
@@ -164,6 +184,15 @@ sat_install() {
                 fi
             fi
 
+            # Python project fallback (uv from git)
+            install_python_from_github "$REPO_PATH" "$REPO_NAME" &
+            spin_with_style "$REPO_NAME" $! "uv"
+            if wait $!; then
+                _track_install "$REPO_NAME" "uv:github.com/$REPO_PATH"
+                status_ok "$REPO_NAME" "uv (git)"
+                continue
+            fi
+
             status_fail "$REPO_NAME not found"
             continue
         fi
@@ -189,24 +218,33 @@ sat_install() {
         if [[ -n "$FORCE_SOURCE" ]]; then
             # Special handling for gh - search GitHub API for repo
             if [[ "$FORCE_SOURCE" == "gh" ]]; then
-                if ! command -v huber &>/dev/null; then
-                    status_fail "$PROGRAM - huber not found (install with: sat source huber)"
-                    continue
-                fi
-                source "$SAT_LIB/huber.sh"
                 # Search GitHub API for top match
                 local repo=$(curl -s "https://api.github.com/search/repositories?q=$PROGRAM&per_page=1" | jq -r '.items[0].full_name' 2>/dev/null)
                 if [[ -z "$repo" || "$repo" == "null" ]]; then
                     status_fail "$PROGRAM not found on GitHub"
                     continue
                 fi
-                huber_cmd install "$repo" &>/dev/null &
-                spin_with_style "$PROGRAM" $! "gh"
+
+                # Try huber first (binary releases)
+                if command -v huber &>/dev/null; then
+                    source "$SAT_LIB/huber.sh"
+                    huber_cmd install "$repo" &>/dev/null &
+                    spin_with_style "$repo" $! "gh"
+                    if wait $!; then
+                        _track_install "$PROGRAM" "gh:$repo"
+                        status_ok "$repo" "gh"
+                        continue
+                    fi
+                fi
+
+                # Fallback: Python project via uv
+                install_python_from_github "$repo" "$PROGRAM" &
+                spin_with_style "$repo" $! "uv"
                 if wait $!; then
-                    _track_install "$PROGRAM" "gh:$repo"
-                    status_ok "$PROGRAM" "gh"
+                    _track_install "$PROGRAM" "uv:github.com/$repo"
+                    status_ok "$repo" "uv (git)"
                 else
-                    status_fail "$PROGRAM ($repo) install failed"
+                    status_fail "$repo install failed"
                 fi
                 continue
             fi

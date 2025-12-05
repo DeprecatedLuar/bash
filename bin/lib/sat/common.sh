@@ -45,7 +45,7 @@ source_color() {
 }
 
 # Install fallback order for permanent installs (system first for stability)
-INSTALL_ORDER=(system brew nix cargo uv npm repo sat)
+INSTALL_ORDER=(system brew nix cargo uv npm repo sat gh)
 
 # Install order for sat shell (isolated/user-space first, system before npm)
 SHELL_INSTALL_ORDER=(brew nix cargo uv system npm repo sat)
@@ -501,6 +501,23 @@ try_source() {
             curl -sSL --fail --head "$SAT_BASE/cargo-bay/programs/${tool}.sh" >/dev/null 2>&1 || return 1
             source <(curl -sSL "$SAT_BASE/internal/fetcher.sh")
             sat_init && sat_run "$tool" &>/dev/null
+            ;;
+        gh)
+            # Search GitHub for tool, install if Python project
+            command -v uv &>/dev/null || return 1
+            local repo=$(curl -s "https://api.github.com/search/repositories?q=$tool&per_page=1" | jq -r '.items[0].full_name' 2>/dev/null)
+            [[ -z "$repo" || "$repo" == "null" ]] && return 1
+            # Check for Python project markers
+            local has_python=false
+            for file in pyproject.toml setup.py setup.cfg; do
+                if curl -sSL --fail --head "https://raw.githubusercontent.com/$repo/main/$file" >/dev/null 2>&1 ||
+                   curl -sSL --fail --head "https://raw.githubusercontent.com/$repo/master/$file" >/dev/null 2>&1; then
+                    has_python=true
+                    break
+                fi
+            done
+            [[ "$has_python" == false ]] && return 1
+            uv tool install "git+https://github.com/$repo" 2>/dev/null
             ;;
         *)
             return 1

@@ -4,8 +4,25 @@
 set -euo pipefail
 
 BASHRC="${BASHRC:-$HOME/.config/lushrc}"
+SYS_BIN="$HOME/bin/sys"
 
 case "${1:-help}" in
+    root)
+        [[ -z "$2" ]] && { echo "Usage: lush root <program> [program2...]"; exit 1; }
+        shift
+        for prog in "$@"; do
+            bin=$(command -v "$prog" 2>/dev/null)
+            if [[ -z "$bin" ]]; then
+                echo "$prog: not found"
+                continue
+            fi
+            mkdir -p "$SYS_BIN"
+            ln -sf "$bin" "$SYS_BIN/$prog"
+            echo "$prog -> $SYS_BIN/"
+        done
+        "$BASHRC/bin/lib/reload.sh" -s
+        ;;
+
     update)
         echo "Updating lushrc..."
         cd "$BASHRC" || exit 1
@@ -28,10 +45,11 @@ case "${1:-help}" in
 lush - lushrc management
 
 Commands:
-  update   - Pull latest from remote
-  status   - Show local changes
-  version  - Show current version
-  help     - Show this message
+  root <prog>  - Symlink to ~/bin/sys for sudo access
+  update       - Pull latest from remote
+  status       - Show local changes
+  version      - Show current version
+  help         - Show this message
 EOF
         ;;
 esac

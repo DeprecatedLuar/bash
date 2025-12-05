@@ -44,7 +44,7 @@ for metric in "${metrics[@]}"; do
             fi
             ;;
         fan)
-            sensors | awk '/^fan[0-9]+:/ && /RPM/ {
+            command -v sensors &>/dev/null && sensors | awk '/^fan[0-9]+:/ && /RPM/ {
                 match($0, /[[:space:]]+([0-9]+) RPM/, a); sum+=a[1]; count++
             } END {if(count>0) printf "FAN %.0frpm\n", sum/count}'
             ;;
