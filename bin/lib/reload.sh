@@ -30,6 +30,14 @@ if [[ "$1" == "--system" ]] || [[ "$1" == "-s" ]] || [[ "$1" == "--hard" ]] || [
     sync_system_links
 fi
 
+#--[ENSURE KITTY TERMINFO]---------------------
+
+if ! infocmp xterm-kitty &>/dev/null; then
+    if ! sat install kitty-terminfo:sys 2>/dev/null; then
+        export TERM=xterm-256color
+    fi
+fi
+
 #--[REFRESH COMMAND HASH]-----------------------
 
 hash -r

@@ -30,3 +30,5 @@ fi
 # Generated for envman. Do not edit.
 [ -s "$HOME/.config/envman/load.sh" ] && source "$HOME/.config/envman/load.sh"
 export QT_QPA_PLATFORMTHEME=qt5ct
+
+if [ -e /home/luar/.nix-profile/etc/profile.d/nix.sh ]; then . /home/luar/.nix-profile/etc/profile.d/nix.sh; fi # added by Nix installer
