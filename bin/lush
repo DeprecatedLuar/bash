@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# lush - lushrc management utility
+
+set -euo pipefail
+
+BASHRC="${BASHRC:-$HOME/.config/lushrc}"
+
+case "${1:-help}" in
+    update)
+        echo "Updating lushrc..."
+        cd "$BASHRC" || exit 1
+        git pull
+        echo "Run 'reload' to apply changes"
+        ;;
+
+    status)
+        cd "$BASHRC" || exit 1
+        git status --short
+        ;;
+
+    version)
+        cd "$BASHRC" || exit 1
+        echo "lushrc @ $(git rev-parse --short HEAD) ($(git log -1 --format='%cr'))"
+        ;;
+
+    help|*)
+        cat << 'EOF'
+lush - lushrc management
+
+Commands:
+  update   - Pull latest from remote
+  status   - Show local changes
+  version  - Show current version
+  help     - Show this message
+EOF
+        ;;
+esac

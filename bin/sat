@@ -264,11 +264,6 @@ case "$1" in
         git clone "https://github.com/$GITHUB_USER/$REPO.git" "$DEST/$REPO"
         ;;
 
-    update)
-        cd "$BASHRC" || exit 1
-        git pull
-        ;;
-
     which|whereis)
         [[ -z "$2" ]] && { echo "Usage: sat which <program> [program2] ..."; exit 1; }
         shift
@@ -356,7 +351,6 @@ Commands:
   untrack <program>   - Remove from manifest without uninstalling
   scan                - Scan ecosystem dirs and add all found packages
   clone <repo> [dest] - Clone your repo
-  update              - Pull latest bash config
 
 Source syntax (install/shell):
   pkg:sys             - System package manager (apt/pacman/etc)
