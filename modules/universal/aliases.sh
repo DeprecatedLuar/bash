@@ -16,6 +16,9 @@ alias ed='$EDITOR $BASHRC/modules/defaults/defaults.sh'
 
 alias tx='. $BASHRC/bin/tx'
 
+# Print install one-liner (for spreading the config)
+alias mitosis='echo "curl -fsSL https://raw.githubusercontent.com/DeprecatedLuar/lushrc/main/install.sh | bash"'
+
 
 
 
