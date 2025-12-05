@@ -9,7 +9,7 @@
 # esac
 
 # =====================================================
-# SHELL CONFIG ROOT (single source of truth)
+# CONFIG ROOT
 # =====================================================
 export BASHRC="$HOME/.config/lushrc"
 
@@ -37,15 +37,13 @@ fi
 # DEVELOPMENT TOOLS CONFIGURATION
 # =====================================================
 
-# Rust tools - organized in shell config folder
-export CARGO_HOME="$BASHRC/dev-tools/cargo"
-export RUSTUP_HOME="$BASHRC/dev-tools/rustup"
+# Dev tools root - XDG-compliant location for toolchains
+export DEV_HOME="$HOME/.local/share/dev"
 
-# Go tools - organized in shell config folder
-export GOPATH="$BASHRC/dev-tools/go"
-
-# npm - organized in shell config folder
-export NPM_CONFIG_PREFIX="$BASHRC/dev-tools/npm"
+export CARGO_HOME="$DEV_HOME/cargo"
+export RUSTUP_HOME="$DEV_HOME/rustup"
+export GOPATH="$DEV_HOME/go"
+export NPM_CONFIG_PREFIX="$DEV_HOME/npm"
 
 # Micro editor - enable true color support for colorschemes
 export MICRO_TRUECOLOR=1
@@ -54,9 +52,6 @@ export MICRO_TRUECOLOR=1
 if [ -x "/home/linuxbrew/.linuxbrew/bin/brew" ]; then
     eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 fi
-
-# Go tools - using system installation
-# Custom GOROOT/GOPATH removed to use Go modules properly
 
 # =====================================================
 # SHELL OPTIONS
