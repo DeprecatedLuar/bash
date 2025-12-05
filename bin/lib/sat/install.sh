@@ -86,9 +86,21 @@ sat_install() {
             --go)           DEFAULT_SOURCE="go" ;;
             --brew)         DEFAULT_SOURCE="brew" ;;
             --nix)          DEFAULT_SOURCE="nix" ;;
+            --gh|--github)  DEFAULT_SOURCE="gh" ;;
             *)              SPECS+=("$arg") ;;
         esac
     done
+
+    # Helper: add to system manifest (promotes from master if exists there)
+    _track_install() {
+        local tool="$1" src="$2"
+        if master_has_tool "$tool"; then
+            master_promote "$tool" "$src"
+            printf "  ${C_DIM}(promoted from shell session)${C_RESET}\n"
+        else
+            manifest_add "$tool" "$src"
+        fi
+    }
 
     for SPEC in "${SPECS[@]}"; do
         parse_tool_spec "$SPEC"
@@ -99,12 +111,27 @@ sat_install() {
             local REPO_PATH="$PROGRAM"
             local REPO_NAME="${PROGRAM##*/}"
 
+            # Try huber first (GitHub release manager)
+            if command -v huber &>/dev/null; then
+                source "$SAT_LIB/huber.sh"
+                huber_cmd install "$REPO_PATH" &>/dev/null &
+                spin_with_style "$REPO_NAME" $! "gh"
+                if wait $!; then
+                    _track_install "$REPO_NAME" "gh:$REPO_PATH"
+                    status_ok "$REPO_NAME" "gh"
+                    continue
+                fi
+            else
+                printf "  ${C_DIM}(huber not found - install with: sat source huber)${C_RESET}\n"
+            fi
+
+            # Fall back to install.sh
             local INSTALL_URL="https://raw.githubusercontent.com/$REPO_PATH/main/install.sh"
             curl -sSL --fail --head "$INSTALL_URL" >/dev/null 2>&1 &
             spin_with_style "$REPO_NAME" $! "repo"
             if wait $!; then
                 curl -sSL "$INSTALL_URL" | bash
-                manifest_add "$REPO_NAME" "repo:$REPO_PATH"
+                _track_install "$REPO_NAME" "repo:$REPO_PATH"
                 status_ok "$REPO_NAME" "repo"
                 continue
             fi
@@ -114,7 +141,7 @@ sat_install() {
             spin_with_style "$REPO_NAME" $! "repo"
             if wait $!; then
                 curl -sSL "$INSTALL_URL" | bash
-                manifest_add "$REPO_NAME" "repo:$REPO_PATH"
+                _track_install "$REPO_NAME" "repo:$REPO_PATH"
                 status_ok "$REPO_NAME" "repo"
                 continue
             fi
@@ -122,7 +149,7 @@ sat_install() {
             install_from_release "$REPO_PATH" "$REPO_NAME" &
             spin_with_style "$REPO_NAME" $! "repo"
             if wait $!; then
-                manifest_add "$REPO_NAME" "repo:$REPO_PATH"
+                _track_install "$REPO_NAME" "repo:$REPO_PATH"
                 status_ok "$REPO_NAME" "repo"
                 continue
             fi
@@ -131,7 +158,7 @@ sat_install() {
                 go install "github.com/$REPO_PATH@latest" &>/dev/null &
                 spin_with_style "$REPO_NAME" $! "go"
                 if wait $!; then
-                    manifest_add "$REPO_NAME" "go:github.com/$REPO_PATH"
+                    _track_install "$REPO_NAME" "go:github.com/$REPO_PATH"
                     status_ok "$REPO_NAME" "go"
                     continue
                 fi
@@ -143,6 +170,15 @@ sat_install() {
 
         if [[ -z "$FORCE_SOURCE" ]] && command -v "$PROGRAM" &>/dev/null; then
             local existing_src=$(detect_source "$PROGRAM")
+            # If in master manifest, offer to promote
+            if master_has_tool "$PROGRAM"; then
+                local display=$(source_display "$existing_src")
+                local color=$(source_color "$display")
+                printf "%-30s [${color}%s${C_RESET}]\n" "$PROGRAM (shell session)" "$display"
+                master_promote "$PROGRAM" "$existing_src"
+                printf "  ${C_DIM}Promoted to system manifest${C_RESET}\n"
+                continue
+            fi
             local display=$(source_display "$existing_src")
             local color=$(source_color "$display")
             printf "%-30s [${color}%s${C_RESET}]\n" "$PROGRAM already installed" "$display"
@@ -151,10 +187,34 @@ sat_install() {
         fi
 
         if [[ -n "$FORCE_SOURCE" ]]; then
+            # Special handling for gh - search GitHub API for repo
+            if [[ "$FORCE_SOURCE" == "gh" ]]; then
+                if ! command -v huber &>/dev/null; then
+                    status_fail "$PROGRAM - huber not found (install with: sat source huber)"
+                    continue
+                fi
+                source "$SAT_LIB/huber.sh"
+                # Search GitHub API for top match
+                local repo=$(curl -s "https://api.github.com/search/repositories?q=$PROGRAM&per_page=1" | jq -r '.items[0].full_name' 2>/dev/null)
+                if [[ -z "$repo" || "$repo" == "null" ]]; then
+                    status_fail "$PROGRAM not found on GitHub"
+                    continue
+                fi
+                huber_cmd install "$repo" &>/dev/null &
+                spin_with_style "$PROGRAM" $! "gh"
+                if wait $!; then
+                    _track_install "$PROGRAM" "gh:$repo"
+                    status_ok "$PROGRAM" "gh"
+                else
+                    status_fail "$PROGRAM ($repo) install failed"
+                fi
+                continue
+            fi
+
             try_source "$PROGRAM" "$FORCE_SOURCE" &
             spin_with_style "$PROGRAM" $! "$FORCE_SOURCE"
             if wait $!; then
-                manifest_add "$PROGRAM" "$FORCE_SOURCE"
+                _track_install "$PROGRAM" "$FORCE_SOURCE"
                 status_ok "$PROGRAM" "$FORCE_SOURCE"
             else
                 status_fail "$PROGRAM not found in $(source_display "$FORCE_SOURCE")"
@@ -163,7 +223,7 @@ sat_install() {
         fi
 
         if install_with_fallback "$PROGRAM"; then
-            manifest_add "$PROGRAM" "$_INSTALL_SOURCE"
+            _track_install "$PROGRAM" "$_INSTALL_SOURCE"
             status_ok "$PROGRAM" "$_INSTALL_SOURCE"
         else
             status_fail "$PROGRAM not found"

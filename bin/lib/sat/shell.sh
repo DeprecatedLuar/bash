@@ -1,46 +1,16 @@
 #!/usr/bin/env bash
 # sat shell - temporary environment with auto-cleanup
 
-master_add() {
-    local tool="$1" source="$2" pid="$3"
-    echo "$tool:$source:$pid" >> "$SAT_SHELL_MASTER"
-}
-
-master_remove_pid() {
-    local pid="$1"
-    [[ -f "$SAT_SHELL_MASTER" ]] && sed -i "/:$pid\$/d" "$SAT_SHELL_MASTER"
-}
-
+# Check if tool:source has other live sessions (for shared cleanup)
 master_tool_has_other_live_pids() {
-    local tool="$1" our_pid="$2"
+    local tool="$1" src="$2" our_pid="$3"
     [[ ! -f "$SAT_SHELL_MASTER" ]] && return 1
-    while IFS=: read -r t src pid; do
-        [[ "$t" != "$tool" ]] && continue
+    while IFS=: read -r t s pid; do
+        [[ "$t" != "$tool" || "$s" != "$src" ]] && continue
         [[ "$pid" == "$our_pid" ]] && continue
         kill -0 "$pid" 2>/dev/null && return 0
     done < "$SAT_SHELL_MASTER"
     return 1
-}
-
-master_get_source() {
-    local tool="$1"
-    [[ -f "$SAT_SHELL_MASTER" ]] && grep "^$tool:" "$SAT_SHELL_MASTER" | head -1 | cut -d: -f2
-}
-
-cleanup_master() {
-    [[ ! -f "$SAT_SHELL_MASTER" ]] && return
-    local temp=$(mktemp)
-    while IFS=: read -r tool source pid; do
-        [[ -z "$tool" ]] && continue
-        if kill -0 "$pid" 2>/dev/null; then
-            echo "$tool:$source:$pid" >> "$temp"
-        else
-            if ! master_tool_has_other_live_pids "$tool" "$pid" && [[ -z "$(manifest_get "$tool")" ]]; then
-                pkg_remove "$tool" "$source" >/dev/null 2>&1
-            fi
-        fi
-    done < "$SAT_SHELL_MASTER"
-    mv "$temp" "$SAT_SHELL_MASTER"
 }
 
 shell_cleanup() {
@@ -48,8 +18,8 @@ shell_cleanup() {
     local session_dir="$2"
     local xdg_dir="$3"
     local session_manifest="$session_dir/manifest"
-    local snapshot_before="$session_dir/snapshot-before.txt"
-    local snapshot_after="$session_dir/snapshot-after.txt"
+    local snapshot_before="$session_dir/snapshot-before"
+    local snapshot_after="$session_dir/snapshot-after"
 
     echo ""
     printf "${C_DIM}Cleaning up session $session_pid${C_RESET}\n"
@@ -82,16 +52,17 @@ shell_cleanup() {
     local -a to_keep=()
 
     for tool in "${session_tools[@]}"; do
-        local source="${session_sources[$tool]}"
+        local src="${session_sources[$tool]}"
 
-        if master_tool_has_other_live_pids "$tool" "$session_pid"; then
+        # Check if other sessions are using this tool:source
+        if master_tool_has_other_live_pids "$tool" "$src" "$session_pid"; then
             to_keep+=("$tool (other session)")
             continue
         fi
 
-        local tracked_src=$(manifest_get "$tool")
-        if [[ -n "$tracked_src" ]]; then
-            to_keep+=("$tool (permanent)")
+        # Check if tool:source was promoted to system manifest
+        if grep -q "^$tool=$src\$" "$SAT_MANIFEST" 2>/dev/null; then
+            to_keep+=("$tool (promoted)")
             continue
         fi
 
@@ -108,24 +79,29 @@ shell_cleanup() {
             local display=$(source_display "$src")
             local color=$(source_color "$display")
 
-            pkg_remove "$tool" "$src" >/dev/null 2>&1 &
+            local err_file="/tmp/sat-cleanup-$$-$tool"
+            pkg_remove "$tool" "$src" >"$err_file" 2>&1 &
             spin_probe "$tool" $!
             if wait $!; then
-                sed -i "/^${tool}:.*:${session_pid}$/d" "$SAT_SHELL_MASTER"
                 printf "  - %-18s [${color}%s${C_RESET}]\n" "$tool" "$display"
             else
-                printf "  ${C_CROSS} %-18s ${C_DIM}(failed)${C_RESET}\n" "$tool"
+                local err=$(cat "$err_file" 2>/dev/null | head -1)
+                printf "  ${C_CROSS} %-18s [${color}%s${C_RESET}] %s\n" "$tool" "$display" "$err"
             fi
+            rm -f "$err_file"
+            # Remove from master manifest
+            master_remove "$tool" "$src" "$session_pid"
         done
     else
         echo "  Nothing to remove"
     fi
 
+    # Clean up configs created during session
     if [[ -f "$snapshot_before" ]]; then
+        take_snapshot "$snapshot_after"
         cleanup_session_configs "$snapshot_before" "$snapshot_after" "$session_manifest"
     fi
 
-    master_remove_pid "$session_pid"
     rm -rf "$session_dir" "$xdg_dir"
 }
 
@@ -146,11 +122,18 @@ sat_shell() {
         return 1
     fi
 
-    cleanup_master
+    # Cache sudo if any :sys tools requested (before spawning tmux)
+    for spec in "${specs[@]}"; do
+        parse_tool_spec "$spec"
+        if [[ "$_TOOL_SOURCE" == "system" ]]; then
+            sudo -v || { echo "sudo required for system packages"; return 1; }
+            break
+        fi
+    done
 
-    local session_dir="$SAT_SESSIONS_DIR/$$"
+    local session_dir="$SAT_SHELL_DIR/$$"
     local manifest="$session_dir/manifest"
-    local snapshot_before="$session_dir/snapshot-before.txt"
+    local snapshot_before="$session_dir/snapshot-before"
 
     mkdir -p "$session_dir"
 
@@ -193,7 +176,7 @@ export XDG_DATA_HOME="$xdg_dir/data"
 export XDG_CACHE_HOME="$xdg_dir/cache"
 export XDG_STATE_HOME="$xdg_dir/state"
 
-SAT_MANIFEST="$manifest"
+SAT_SESSION_MANIFEST="$manifest"
 SAT_SHELL_MASTER="$SAT_SHELL_MASTER"
 
 SAT_TO_INSTALL=($to_install_str)
@@ -206,10 +189,6 @@ RCFILE_VARS
 source "$BASHRC/bin/lib/sat/common.sh"
 
 INSTALL_ORDER=("${SHELL_INSTALL_ORDER[@]}")
-
-_master_add() {
-    echo "$1:$2:$SAT_SESSION" >> "$SAT_SHELL_MASTER"
-}
 
 clear
 cols=$(tput cols 2>/dev/null || echo 80)
@@ -262,27 +241,28 @@ if [[ ${#SAT_TO_INSTALL[@]} -gt 0 ]]; then
             light=$(source_light "$_INSTALL_SOURCE")
             color=$(source_color "$display")
             printf "\r[${C_CHECK}] ${light}%-20s${C_RESET} [${color}%s${C_RESET}]\n" "$tool" "$display"
-            echo "TOOL=$tool" >> "$SAT_MANIFEST"
-            echo "SOURCE_$tool=$_INSTALL_SOURCE" >> "$SAT_MANIFEST"
-            _master_add "$tool" "$_INSTALL_SOURCE"
+            echo "TOOL=$tool" >> "$SAT_SESSION_MANIFEST"
+            echo "SOURCE_$tool=$_INSTALL_SOURCE" >> "$SAT_SESSION_MANIFEST"
+            master_add "$tool" "$_INSTALL_SOURCE" "$SAT_SESSION"
         else
             printf "\r[${C_CROSS}] %-20s\n" "$tool"
         fi
     done
 
+    # Track dependencies that got installed
     for spec in "${SAT_TO_INSTALL[@]}"; do
         parse_tool_spec "$spec"
         tool="$_TOOL_NAME"
-        if command -v "$tool" &>/dev/null && ! grep -q "^TOOL=$tool$" "$SAT_MANIFEST" 2>/dev/null; then
+        if command -v "$tool" &>/dev/null && ! grep -q "^TOOL=$tool$" "$SAT_SESSION_MANIFEST" 2>/dev/null; then
             src=$(resolve_source "$tool" "")
             [[ -z "$src" || "$src" == "unknown" ]] && continue
             display=$(source_display "$src")
             light=$(source_light "$src")
             color=$(source_color "$display")
             printf "[${C_CHECK}] ${light}%-20s${C_RESET} [${color}%s${C_RESET}] (dep)\n" "$tool" "$display"
-            echo "TOOL=$tool" >> "$SAT_MANIFEST"
-            echo "SOURCE_$tool=$src" >> "$SAT_MANIFEST"
-            _master_add "$tool" "$src"
+            echo "TOOL=$tool" >> "$SAT_SESSION_MANIFEST"
+            echo "SOURCE_$tool=$src" >> "$SAT_SESSION_MANIFEST"
+            master_add "$tool" "$src" "$SAT_SESSION"
         fi
     done
     echo ""

@@ -56,6 +56,14 @@ link_contents "$BASHRC/bin" "$HOME/bin"
 link_contents "$TOOLS/bin/lib" "$HOME/bin/lib"
 link_contents "$BASHRC/bin/lib" "$HOME/bin/lib"
 
+# UV tools → ~/.local/bin
+if command -v uv &>/dev/null; then
+    for tool_bin in "$HOME/.local/share/uv/tools"/*/bin/*; do
+        [ -x "$tool_bin" ] || continue
+        ln -sf "$tool_bin" "$HOME/.local/bin/$(basename "$tool_bin")"
+    done
+fi
+
 #--[SYSTEMD]------------------------------------
 
 if [ -d "$HOME/.config/systemd" ]; then

@@ -33,7 +33,7 @@ source_color() {
         npm|node)                    printf '%s' "$C_NODE" ;;
         uv|pip|python)               printf '%s' "$C_PYTHON" ;;
         apt|apk|pacman|dnf|pkg|system) printf '%s' "$C_SYSTEM" ;;
-        repo|repo:*)                 printf '%s' "$C_REPO" ;;
+        repo|repo:*|gh|gh:*|github)  printf '%s' "$C_REPO" ;;
         sat)                         printf '%s' "$C_SAT" ;;
         go|go:*)                     printf '%s' "$C_GO" ;;
         brew)                        printf '%s' "$C_BREW" ;;
@@ -50,29 +50,43 @@ INSTALL_ORDER=(system brew nix cargo uv npm repo sat)
 # Install order for sat shell (isolated/user-space first, system before npm)
 SHELL_INSTALL_ORDER=(brew nix cargo uv system npm repo sat)
 
-SAT_BASE="https://raw.githubusercontent.com/DeprecatedLuar/the-satellite/main"
-SAT_LOCAL="$PROJECTS/cli/the-satellite"
+LUAR="DeprecatedLuar"
+SAT_REPO="the-satellite/main"
+SAT_BASE="https://raw.githubusercontent.com/$LUAR/$SAT_REPO"
 SAT_DATA="$HOME/.local/share/sat"
 SAT_MANIFEST="${SAT_MANIFEST:-$SAT_DATA/manifest}"
-SAT_SHELL_MASTER="$SAT_DATA/shell-manifest"
-SAT_RUN_DIR="/tmp/sat-shell"
+SAT_SHELL_DIR="$SAT_DATA/shell"
+SAT_SHELL_MASTER="$SAT_SHELL_DIR/manifest"
 
-# Ensure data dir exists
-mkdir -p "$SAT_DATA"
-touch "$SAT_MANIFEST"
-touch "$SAT_SHELL_MASTER"
+# Ensure data dirs exist
+mkdir -p "$SAT_DATA" "$SAT_SHELL_DIR"
+touch "$SAT_MANIFEST" "$SAT_SHELL_MASTER"
 
-# Source OS detection (local or remote)
-if [[ -f "$SAT_LOCAL/internal/os_detection.sh" ]]; then
-    source "$SAT_LOCAL/internal/os_detection.sh"
-else
-    source <(curl -sSL "$SAT_BASE/internal/os_detection.sh")
-fi
+# Source OS detection (remote)
+source <(curl -sSL "$SAT_BASE/internal/os_detection.sh")
 
-# Manifest helpers
-manifest_add() { echo "$1=$2" >> "$SAT_MANIFEST"; }
+# System manifest helpers (tool=source)
+manifest_add() { grep -qxF "$1=$2" "$SAT_MANIFEST" 2>/dev/null || echo "$1=$2" >> "$SAT_MANIFEST"; }
 manifest_get() { grep "^$1=" "$SAT_MANIFEST" 2>/dev/null | cut -d= -f2; }
 manifest_remove() { sed -i "/^$1=/d" "$SAT_MANIFEST"; }
+
+# Master manifest helpers (tool:source:pid)
+master_add() { echo "$1:$2:$3" >> "$SAT_SHELL_MASTER"; }
+master_get_pids() { grep "^$1:$2:" "$SAT_SHELL_MASTER" 2>/dev/null | cut -d: -f3; }
+master_has_tool() { grep -q "^$1:" "$SAT_SHELL_MASTER" 2>/dev/null; }
+master_remove() {
+    local tool="$1" src="$2" pid="$3"
+    # Use | delimiter to avoid issues with / in paths
+    sed -i "\|^${tool}:${src}:${pid}\$|d" "$SAT_SHELL_MASTER"
+}
+master_remove_tool() { sed -i "\|^$1:|d" "$SAT_SHELL_MASTER"; }
+master_promote() {
+    local tool="$1" src="$2"
+    # Remove all entries for this tool:source from master (use | delimiter)
+    sed -i "\|^${tool}:${src}:|d" "$SAT_SHELL_MASTER"
+    # Add to system manifest if not already there
+    grep -qF "$tool=$src" "$SAT_MANIFEST" 2>/dev/null || manifest_add "$tool" "$src"
+}
 
 # Animated status output (legacy)
 spin() {
@@ -143,10 +157,12 @@ status_fail() {
 # Map internal source to display name
 source_display() {
     case "$1" in
-        npm)    echo "node" ;;
-        uv)     echo "python" ;;
-        cargo)  echo "rust" ;;
-        *)      echo "$1" ;;
+        npm)          echo "node" ;;
+        uv)           echo "python" ;;
+        cargo)        echo "rust" ;;
+        repo|repo:*)  echo "github" ;;
+        gh|gh:*)      echo "github" ;;
+        *)            echo "$1" ;;
     esac
 }
 
@@ -157,7 +173,7 @@ source_light() {
         uv|pip|python)                 printf '%s' "$C_PYTHON_L" ;;
         cargo|rust)                    printf '%s' "$C_RUST_L" ;;
         apt|apk|pacman|dnf|pkg|system) printf '%s' "$C_SYSTEM_L" ;;
-        sat|repo|repo:*)               printf '%s' "$C_REPO_L" ;;
+        sat|repo|repo:*|gh|gh:*|github) printf '%s' "$C_REPO_L" ;;
         go|go:*)                       printf '%s' "$C_GO_L" ;;
         brew)                          printf '%s' "$C_BREW_L" ;;
         nix)                           printf '%s' "$C_NIX_L" ;;
@@ -190,6 +206,7 @@ parse_tool_spec() {
             go)          _TOOL_SOURCE="go" ;;
             brew)        _TOOL_SOURCE="brew" ;;
             nix)         _TOOL_SOURCE="nix" ;;
+            gh|github)   _TOOL_SOURCE="gh" ;;
             *)           _TOOL_SOURCE="$src" ;;
         esac
     else
@@ -209,7 +226,7 @@ detect_source() {
 
     case "$bin" in
         */.cargo/bin/*|*/dev-tools/cargo/bin/*)  echo "cargo" ;;
-        */dev-tools/npm/*|*/.npm-global/*)       echo "npm" ;;
+        */dev-tools/npm/*|*/.npm-global/*|/usr/lib/node_modules/*) echo "npm" ;;
         */dev-tools/go/bin/*|*/go/bin/*)         echo "go" ;;
         */.local/share/uv/tools/*) echo "uv" ;;
         */linuxbrew/*|*/homebrew/*)              echo "brew" ;;
@@ -357,6 +374,11 @@ pkg_remove() {
         sat) rm -f "$HOME/.local/bin/$pkg" ;;
         repo)    rm -f "$HOME/.local/bin/$pkg" ;;
         repo:*)  rm -f "$HOME/.local/bin/$pkg" ;;
+        gh:*)
+            local repo="${source#gh:}"
+            source "$SAT_LIB/huber.sh"
+            huber_cmd uninstall "$repo"
+            ;;
         system)  # Generic system - detect package manager
             local mgr=$(get_pkg_manager)
             [[ -z "$mgr" ]] && return 1
@@ -377,7 +399,63 @@ try_source() {
     case "$source" in
         cargo)
             command -v cargo &>/dev/null || return 1
-            cargo install "$tool" &>/dev/null
+            local err_file="/tmp/sat-cargo-err-$BASHPID"
+
+            # First attempt
+            if cargo install "$tool" >"$err_file" 2>&1; then
+                rm -f "$err_file"
+                return 0
+            fi
+
+            # Check for missing build tools
+            local missing=$(grep -oP "is \`\K[^\`]+(?=\` not installed)" "$err_file" 2>/dev/null)
+            rm -f "$err_file"
+
+            if [[ -n "$missing" ]]; then
+                printf "\r%-50s\r" ""
+                printf "${C_DIM}Build requires %s, installing...${C_RESET}\n" "$missing"
+                local dep_installed=false
+
+                # Try brew first (no sudo)
+                if ! $dep_installed && command -v brew &>/dev/null; then
+                    brew install "$missing" &>/dev/null &
+                    spin_with_style "$missing" $! "brew"
+                    if wait $!; then
+                        printf "\r[${C_CHECK}] %-20s [${C_BREW}brew${C_RESET}] ${C_DIM}(build dep)${C_RESET}\n" "$missing"
+                        dep_installed=true
+                    fi
+                fi
+
+                # Try nix (no sudo)
+                if ! $dep_installed && command -v nix-env &>/dev/null; then
+                    nix-env -iA "nixpkgs.$missing" &>/dev/null &
+                    spin_with_style "$missing" $! "nix"
+                    if wait $!; then
+                        printf "\r[${C_CHECK}] %-20s [${C_NIX}nix${C_RESET}] ${C_DIM}(build dep)${C_RESET}\n" "$missing"
+                        dep_installed=true
+                    fi
+                fi
+
+                # Fall back to system (needs sudo)
+                if ! $dep_installed; then
+                    local mgr=$(get_pkg_manager)
+                    if [[ -n "$mgr" ]] && sudo -v 2>/dev/null; then
+                        pkg_install "$missing" "$mgr" &>/dev/null &
+                        spin_with_style "$missing" $! "system"
+                        if wait $!; then
+                            printf "\r[${C_CHECK}] %-20s [${C_SYSTEM}system${C_RESET}] ${C_DIM}(build dep)${C_RESET}\n" "$missing"
+                            dep_installed=true
+                        fi
+                    fi
+                fi
+
+                # Retry cargo if dep was installed
+                if $dep_installed; then
+                    cargo install "$tool" &>/dev/null
+                    return $?
+                fi
+            fi
+            return 1
             ;;
         uv)
             command -v uv &>/dev/null || return 1
@@ -412,9 +490,9 @@ try_source() {
             ;;
         repo)
             # Check user's GitHub repo for install.sh
-            local url="https://raw.githubusercontent.com/$GITHUB_USER/$tool/main/install.sh"
+            local url="https://raw.githubusercontent.com/$LUAR/$tool/main/install.sh"
             curl -sSL --fail --head "$url" >/dev/null 2>&1 || {
-                url="https://raw.githubusercontent.com/$GITHUB_USER/$tool/master/install.sh"
+                url="https://raw.githubusercontent.com/$LUAR/$tool/master/install.sh"
                 curl -sSL --fail --head "$url" >/dev/null 2>&1 || return 1
             }
             curl -sSL "$url" | bash &>/dev/null
@@ -446,7 +524,7 @@ install_with_fallback() {
         if [[ "$tool" == "$b" ]]; then
             [[ "$tool" == "brew" ]] && wrapper_name="homebrew"
             try_source "$wrapper_name" "sat" &
-            spin_probe "$tool" $!
+            spin_with_style "$tool" $! "sat"
             if wait $!; then
                 _INSTALL_SOURCE="sat"
                 return 0
@@ -457,7 +535,7 @@ install_with_fallback() {
 
     for source in "${INSTALL_ORDER[@]}"; do
         try_source "$tool" "$source" &
-        spin_probe "$tool" $!
+        spin_with_style "$tool" $! "$source"
         if wait $!; then
             _INSTALL_SOURCE="$source"
             return 0
@@ -470,9 +548,6 @@ install_with_fallback() {
 # =============================================================================
 # SNAPSHOT-BASED CONFIG CLEANUP (for sat shell)
 # =============================================================================
-
-# Session storage location (persistent, survives crashes)
-SAT_SESSIONS_DIR="$SAT_DATA/sessions"
 
 # Take snapshot of config directories and dotfiles
 take_snapshot() {
@@ -558,41 +633,94 @@ cleanup_session_configs() {
     done <<< "$new_items"
 }
 
-# Clean up sessions from dead processes (crash recovery)
+# =============================================================================
+# SESSION CLEANUP FUNCTIONS
+# =============================================================================
+
+# Remove a single tool from session: uninstall pkg + update master manifest
+# Args: tool, source, pid
+# Returns: 0 on success, 1 on failure
+session_remove_tool() {
+    local tool="$1" src="$2" pid="$3"
+    local display=$(source_display "$src")
+    local color=$(source_color "$display")
+
+    # Check if tool:source was promoted to system manifest
+    if grep -qF "$tool=$src" "$SAT_MANIFEST" 2>/dev/null; then
+        printf "  ${C_DIM}~ %-18s (in system manifest)${C_RESET}\n" "$tool"
+        master_remove "$tool" "$src" "$pid"
+        return 0
+    fi
+
+    # Attempt to remove the package
+    local err
+    if err=$(pkg_remove "$tool" "$src" 2>&1); then
+        printf "  - %-18s [${color}%s${C_RESET}]\n" "$tool" "$display"
+        master_remove "$tool" "$src" "$pid"
+        return 0
+    else
+        printf "  ${C_CROSS} %-18s [${color}%s${C_RESET}] %s\n" "$tool" "$display" "$err"
+        return 1
+    fi
+}
+
+# Clean up a single session: configs + tools + folders
+# Args: pid
+cleanup_session() {
+    local pid="$1"
+    local session_dir="$SAT_SHELL_DIR/$pid"
+    local xdg_dir="/tmp/sat-$pid"
+
+    printf "${C_DIM}Cleaning orphaned session: $pid${C_RESET}\n"
+
+    # Clean up configs if snapshots exist
+    if [[ -f "$session_dir/snapshot-before" ]]; then
+        local snapshot_after="$session_dir/snapshot-after"
+        take_snapshot "$snapshot_after"
+        [[ -f "$session_dir/manifest" ]] && \
+            cleanup_session_configs "$session_dir/snapshot-before" "$snapshot_after" "$session_dir/manifest"
+    fi
+
+    # Process each tool for this PID from master manifest
+    while IFS=: read -r tool src entry_pid; do
+        [[ "$entry_pid" != "$pid" ]] && continue
+        session_remove_tool "$tool" "$src" "$pid"
+    done < "$SAT_SHELL_MASTER"
+
+    # Delete session folder and XDG temp
+    [[ -d "$session_dir" ]] && rm -rf "$session_dir"
+    [[ -d "$xdg_dir" ]] && rm -rf "$xdg_dir"
+}
+
+# Find and clean up all orphaned sessions (dead PIDs)
+# Called on every sat command
 cleanup_orphaned_sessions() {
-    [[ ! -d "$SAT_SESSIONS_DIR" ]] && return
+    [[ ! -f "$SAT_SHELL_MASTER" || ! -s "$SAT_SHELL_MASTER" ]] && return
 
-    for session_dir in "$SAT_SESSIONS_DIR"/*/; do
-        [[ ! -d "$session_dir" ]] && continue
-
-        local pid=$(basename "$session_dir")
-
-        # Check if process still alive
+    # Get unique dead PIDs and check for system packages
+    local -a dead_pids=()
+    local -A seen_pids=()
+    local needs_sudo=false
+    while IFS=: read -r tool src pid; do
+        [[ -z "$pid" || -n "${seen_pids[$pid]}" ]] && continue
+        seen_pids[$pid]=1
         if ! kill -0 "$pid" 2>/dev/null; then
-            printf "${C_DIM}Cleaning orphaned session: $pid${C_RESET}\n"
-
-            # If snapshots exist, clean up configs
-            if [[ -f "$session_dir/manifest" && -f "$session_dir/snapshot-before.txt" ]]; then
-                local snapshot_after="$session_dir/snapshot-after.txt"
-                take_snapshot "$snapshot_after"
-                cleanup_session_configs \
-                    "$session_dir/snapshot-before.txt" \
-                    "$snapshot_after" \
-                    "$session_dir/manifest"
-            fi
-
-            # Remove packages
-            if [[ -f "$session_dir/manifest" ]]; then
-                while IFS='=' read -r key value; do
-                    if [[ "$key" == "TOOL" ]]; then
-                        local src=$(grep "^SOURCE_$value=" "$session_dir/manifest" | cut -d= -f2)
-                        [[ -n "$src" ]] && pkg_remove "$value" "$src" >/dev/null 2>&1
-                    fi
-                done < "$session_dir/manifest"
-            fi
-
-            rm -rf "$session_dir"
+            dead_pids+=("$pid")
+            # Check if this entry needs sudo (system package)
+            [[ "$src" == "system" || "$src" == "apt" || "$src" == "pacman" || "$src" == "dnf" || "$src" == "apk" ]] && needs_sudo=true
         fi
+    done < "$SAT_SHELL_MASTER"
+
+    [[ ${#dead_pids[@]} -eq 0 ]] && return
+
+    # Cache sudo once if needed
+    if $needs_sudo; then
+        sudo -v || { printf "${C_DIM}Skipping system package cleanup (no sudo)${C_RESET}\n"; }
+    fi
+
+    # Clean up each dead session
+    for pid in "${dead_pids[@]}"; do
+        cleanup_session "$pid"
     done
 }
 
