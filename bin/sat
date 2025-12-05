@@ -1,23 +1,209 @@
 #!/usr/bin/env bash
-# sat - Satellite installer (router)
+# sat - Satellite installer (universal package manager)
+
+SAT_LIB="${BASHRC:-$HOME/.config/lushrc}/bin/lib/sat"
 
 source "${BASHRC:-$HOME/.config/lushrc}/modules/universal/paths.sh"
-source "$BASHRC/bin/lib/sat/common.sh"
+source "$SAT_LIB/common.sh"
 
-# Clean up orphaned sessions from crashed sat shells
 cleanup_orphaned_sessions
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ──[UNINSTALL]─────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+
+sat_uninstall() {
+    for PROGRAM in "$@"; do
+        SOURCE=$(manifest_get "$PROGRAM")
+        TRACKED=true
+
+        if [[ -z "$SOURCE" ]]; then
+            if ! command -v "$PROGRAM" &>/dev/null; then
+                status "$PROGRAM not found"
+                continue
+            fi
+            SOURCE=$(detect_source "$PROGRAM")
+            if [[ -z "$SOURCE" || "$SOURCE" == "unknown" ]]; then
+                status "$PROGRAM source unknown, can't remove"
+                continue
+            fi
+            TRACKED=false
+        fi
+
+        printf "Removing %s\n" "$PROGRAM"
+        if pkg_remove "$PROGRAM" "$SOURCE"; then
+            [[ "$TRACKED" == true ]] && manifest_remove "$PROGRAM"
+            status_ok "$PROGRAM removed" "$SOURCE"
+        else
+            status_fail "$PROGRAM removal failed"
+        fi
+    done
+    hash -r
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ──[LIST]──────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+
+sat_list() {
+    local session_manifest=""
+    [[ -n "$SAT_SESSION" ]] && session_manifest="/tmp/sat-shell/$SAT_SESSION/manifest"
+
+    local has_content=false
+
+    if [[ -n "$session_manifest" && -f "$session_manifest" ]]; then
+        echo "Session tools (temporary):"
+        while IFS='=' read -r key value; do
+            [[ "$key" != "TOOL" ]] && continue
+            src=$(grep "^SOURCE_$value=" "$session_manifest" | cut -d= -f2)
+            display=$(source_display "$src")
+            color=$(source_color "$display")
+            printf "  ${C_DIM}%-20s${C_RESET} [${color}%s${C_RESET}]\n" "$value" "$display"
+        done < "$session_manifest"
+        echo ""
+        has_content=true
+    fi
+
+    if [[ -s "$SAT_MANIFEST" ]]; then
+        echo "Tracked by sat:"
+        stale=()
+        while IFS='=' read -r prog source; do
+            [[ -z "$prog" ]] && continue
+            display=$(source_display "$source")
+            color=$(source_color "$display")
+            light=$(source_light "$source")
+            if command -v "$prog" &>/dev/null; then
+                printf "  ${light}%-20s${C_RESET} [${color}%s${C_RESET}]\n" "$prog" "$display"
+            else
+                printf "  ${C_DIM}%-20s [%s] (not found)${C_RESET}\n" "$prog" "$display"
+                stale+=("$prog")
+            fi
+        done < "$SAT_MANIFEST"
+        if [[ ${#stale[@]} -gt 0 ]]; then
+            echo ""
+            echo "Cleaning ${#stale[@]} stale entries..."
+            for prog in "${stale[@]}"; do
+                manifest_remove "$prog"
+            done
+        fi
+        has_content=true
+    fi
+
+    [[ "$has_content" == false ]] && echo "No packages tracked by sat"
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ──[SCAN]──────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+
+sat_scan() {
+    echo "Scanning ecosystem directories..."
+
+    local session_manifest=""
+    [[ -n "$SAT_SESSION" ]] && session_manifest="/tmp/sat-shell/$SAT_SESSION/manifest"
+
+    declare -A scan_dirs=(
+        ["cargo"]="$HOME/.cargo/bin $BASHRC/dev-tools/cargo/bin"
+        ["npm"]="$BASHRC/dev-tools/npm/bin $HOME/.npm-global/bin"
+        ["uv"]="$HOME/.local/share/uv/tools"
+        ["go"]="$HOME/go/bin $BASHRC/dev-tools/go/bin"
+        ["brew"]="/home/linuxbrew/.linuxbrew/bin"
+        ["nix"]="$HOME/.nix-profile/bin"
+    )
+
+    is_from_repo() {
+        local bin="$1"
+        local real=$(readlink -f "$bin" 2>/dev/null || echo "$bin")
+        local dir=$(dirname "$real")
+        while [[ "$dir" != "/" && "$dir" != "$HOME" ]]; do
+            [[ -d "$dir/.git" ]] && return 0
+            dir=$(dirname "$dir")
+        done
+        return 1
+    }
+
+    in_session() {
+        [[ -z "$session_manifest" || ! -f "$session_manifest" ]] && return 1
+        grep -q "^TOOL=$1\$" "$session_manifest" 2>/dev/null
+    }
+
+    is_excluded() {
+        local p="$1"
+        case "$p" in
+            git-*|scalar)                return 0 ;;
+            cargo-*|clippy-driver)       return 0 ;;
+            rust[!u]*|rls)               return 0 ;;
+            trash-*)                     return 0 ;;
+            *-config|*-settings)         return 0 ;;
+            .*|_*)                       return 0 ;;
+        esac
+        return 1
+    }
+
+    local pruned=0
+    while IFS='=' read -r prog source; do
+        [[ -z "$prog" ]] && continue
+        if is_excluded "$prog"; then
+            manifest_remove "$prog"
+            printf "  ${C_DIM}- %-20s (excluded)${C_RESET}\n" "$prog"
+            ((pruned++))
+        fi
+    done < "$SAT_MANIFEST"
+
+    local added=0
+    for src in "${!scan_dirs[@]}"; do
+        for dir in ${scan_dirs[$src]}; do
+            [[ ! -d "$dir" ]] && continue
+            for bin in "$dir"/*; do
+                [[ ! -x "$bin" ]] && continue
+                prog=$(basename "$bin")
+                is_excluded "$prog" && continue
+                [[ -n "$(manifest_get "$prog")" ]] && continue
+                in_session "$prog" && continue
+                manifest_add "$prog" "$src"
+                display=$(source_display "$src")
+                color=$(source_color "$display")
+                printf "  ${color}+${C_RESET} %-20s [${color}%s${C_RESET}]\n" "$prog" "$display"
+                ((added++))
+            done
+        done
+    done
+
+    if [[ -d "$HOME/.local/bin" ]]; then
+        for bin in "$HOME/.local/bin"/*; do
+            [[ ! -x "$bin" ]] && continue
+            prog=$(basename "$bin")
+            is_excluded "$prog" && continue
+            [[ -n "$(manifest_get "$prog")" ]] && continue
+            in_session "$prog" && continue
+            if is_from_repo "$bin"; then
+                manifest_add "$prog" "repo"
+                printf "  ${C_REPO}+${C_RESET} %-20s [${C_REPO}repo${C_RESET}]\n" "$prog"
+                ((added++))
+            fi
+        done
+    fi
+
+    echo ""
+    [[ $pruned -gt 0 ]] && echo "Pruned $pruned excluded entries"
+    echo "Added $added packages to manifest"
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ──[ROUTER]────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
 
 case "$1" in
     deps|dependencies)
         echo "Installing sat dependencies..."
         echo ""
         DEPS=(tmux wget curl jq)
+        source "$SAT_LIB/install.sh"
         for dep in "${DEPS[@]}"; do
             if command -v "$dep" &>/dev/null; then
                 printf "  ${C_CHECK} %s\n" "$dep"
             else
                 printf "  Installing %s...\n" "$dep"
-                source "$BASHRC/bin/lib/sat/install.sh"
                 sat_install "$dep:sys"
             fi
         done
@@ -28,102 +214,31 @@ case "$1" in
     install|i)
         [[ -z "$2" ]] && { echo "Usage: sat install <program> [--rust|--python|--node|--go|--system]"; exit 1; }
         shift
-        source "$BASHRC/bin/lib/sat/install.sh"
+        source "$SAT_LIB/install.sh"
         sat_install "$@"
         ;;
 
     search)
         [[ -z "$2" ]] && { echo "Usage: sat search <program> [--wrap]"; exit 1; }
         shift
-        source "$BASHRC/bin/lib/sat/search.sh"
+        source "$SAT_LIB/search.sh"
         sat_search "$@"
         ;;
 
     uninstall|remove|rm)
         [[ -z "$2" ]] && { echo "Usage: sat uninstall <program> [program2] ..."; exit 1; }
         shift
-        for PROGRAM in "$@"; do
-            SOURCE=$(manifest_get "$PROGRAM")
-            TRACKED=true
-            # If not tracked, try to detect source
-            if [[ -z "$SOURCE" ]]; then
-                if ! command -v "$PROGRAM" &>/dev/null; then
-                    status "$PROGRAM not found"
-                    continue
-                fi
-                SOURCE=$(detect_source "$PROGRAM")
-                if [[ -z "$SOURCE" || "$SOURCE" == "unknown" ]]; then
-                    status "$PROGRAM source unknown, can't remove"
-                    continue
-                fi
-                TRACKED=false
-            fi
-            printf "Removing %s\n" "$PROGRAM"
-            if pkg_remove "$PROGRAM" "$SOURCE"; then
-                [[ "$TRACKED" == true ]] && manifest_remove "$PROGRAM"
-                status_ok "$PROGRAM removed" "$SOURCE"
-            else
-                status_fail "$PROGRAM removal failed"
-            fi
-        done
-        # Clear stale hash entries
-        hash -r
+        sat_uninstall "$@"
         ;;
 
     shell)
         shift
-        source "$BASHRC/bin/lib/sat/shell.sh"
+        source "$SAT_LIB/shell.sh"
         sat_shell "$@"
         ;;
 
     list|ls)
-        # Check for session manifest (sat shell)
-        session_manifest=""
-        [[ -n "$SAT_SESSION" ]] && session_manifest="/tmp/sat-shell/$SAT_SESSION/manifest"
-
-        has_content=false
-
-        # Show session tools first (if in sat shell)
-        if [[ -n "$session_manifest" && -f "$session_manifest" ]]; then
-            echo "Session tools (temporary):"
-            while IFS='=' read -r key value; do
-                [[ "$key" != "TOOL" ]] && continue
-                src=$(grep "^SOURCE_$value=" "$session_manifest" | cut -d= -f2)
-                display=$(source_display "$src")
-                color=$(source_color "$display")
-                printf "  ${C_DIM}%-20s${C_RESET} [${color}%s${C_RESET}]\n" "$value" "$display"
-            done < "$session_manifest"
-            echo ""
-            has_content=true
-        fi
-
-        # Show tracked packages
-        if [[ -s "$SAT_MANIFEST" ]]; then
-            echo "Tracked by sat:"
-            stale=()
-            while IFS='=' read -r prog source; do
-                [[ -z "$prog" ]] && continue
-                display=$(source_display "$source")
-                color=$(source_color "$display")
-                light=$(source_light "$source")
-                if command -v "$prog" &>/dev/null; then
-                    printf "  ${light}%-20s${C_RESET} [${color}%s${C_RESET}]\n" "$prog" "$display"
-                else
-                    printf "  ${C_DIM}%-20s [%s] (not found)${C_RESET}\n" "$prog" "$display"
-                    stale+=("$prog")
-                fi
-            done < "$SAT_MANIFEST"
-            if [[ ${#stale[@]} -gt 0 ]]; then
-                echo ""
-                echo "Cleaning ${#stale[@]} stale entries..."
-                for prog in "${stale[@]}"; do
-                    manifest_remove "$prog"
-                done
-            fi
-            has_content=true
-        fi
-
-        [[ "$has_content" == false ]] && echo "No packages tracked by sat"
+        sat_list
         ;;
 
     track)
@@ -149,97 +264,7 @@ case "$1" in
         ;;
 
     scan)
-        echo "Scanning ecosystem directories..."
-        # Session manifest (if inside sat shell)
-        session_manifest=""
-        [[ -n "$SAT_SESSION" ]] && session_manifest="/tmp/sat-shell/$SAT_SESSION/manifest"
-
-        declare -A scan_dirs=(
-            ["cargo"]="$HOME/.cargo/bin $BASHRC/dev-tools/cargo/bin"
-            ["npm"]="$BASHRC/dev-tools/npm/bin $HOME/.npm-global/bin"
-            ["uv"]="$HOME/.local/share/uv/tools"
-            ["go"]="$HOME/go/bin $BASHRC/dev-tools/go/bin"
-            ["brew"]="/home/linuxbrew/.linuxbrew/bin"
-            ["nix"]="$HOME/.nix-profile/bin"
-        )
-        # Check if binary is from a git repo
-        is_from_repo() {
-            local bin="$1"
-            local real=$(readlink -f "$bin" 2>/dev/null || echo "$bin")
-            local dir=$(dirname "$real")
-            while [[ "$dir" != "/" && "$dir" != "$HOME" ]]; do
-                [[ -d "$dir/.git" ]] && return 0
-                dir=$(dirname "$dir")
-            done
-            return 1
-        }
-        # Check if tool is in session manifest (temp sat shell install)
-        in_session() {
-            [[ -z "$session_manifest" || ! -f "$session_manifest" ]] && return 1
-            grep -q "^TOOL=$1\$" "$session_manifest" 2>/dev/null
-        }
-        # Skip sub-commands, dev tools, internal binaries
-        is_excluded() {
-            local p="$1"
-            case "$p" in
-                git-*|scalar)                return 0 ;;  # git subcommands
-                cargo-*|clippy-driver)       return 0 ;;  # cargo subcommands
-                rust[!u]*|rls)               return 0 ;;  # rust toolchain (keep rustup)
-                trash-*)                     return 0 ;;  # trash-cli subcommands
-                *-config|*-settings)         return 0 ;;  # library dev tools
-                .*|_*)                       return 0 ;;  # hidden/internal
-            esac
-            return 1
-        }
-        # First pass: prune excluded entries from manifest
-        pruned=0
-        while IFS='=' read -r prog source; do
-            [[ -z "$prog" ]] && continue
-            if is_excluded "$prog"; then
-                manifest_remove "$prog"
-                printf "  ${C_DIM}- %-20s (excluded)${C_RESET}\n" "$prog"
-                ((pruned++))
-            fi
-        done < "$SAT_MANIFEST"
-
-        # Second pass: add new packages from ecosystem dirs
-        added=0
-        for src in "${!scan_dirs[@]}"; do
-            for dir in ${scan_dirs[$src]}; do
-                [[ ! -d "$dir" ]] && continue
-                for bin in "$dir"/*; do
-                    [[ ! -x "$bin" ]] && continue
-                    prog=$(basename "$bin")
-                    is_excluded "$prog" && continue
-                    [[ -n "$(manifest_get "$prog")" ]] && continue
-                    in_session "$prog" && continue
-                    manifest_add "$prog" "$src"
-                    display=$(source_display "$src")
-                    color=$(source_color "$display")
-                    printf "  ${color}+${C_RESET} %-20s [${color}%s${C_RESET}]\n" "$prog" "$display"
-                    ((added++))
-                done
-            done
-        done
-
-        # Third pass: scan ~/.local/bin for repo-installed tools
-        if [[ -d "$HOME/.local/bin" ]]; then
-            for bin in "$HOME/.local/bin"/*; do
-                [[ ! -x "$bin" ]] && continue
-                prog=$(basename "$bin")
-                is_excluded "$prog" && continue
-                [[ -n "$(manifest_get "$prog")" ]] && continue
-                in_session "$prog" && continue
-                if is_from_repo "$bin"; then
-                    manifest_add "$prog" "repo"
-                    printf "  ${C_REPO}+${C_RESET} %-20s [${C_REPO}repo${C_RESET}]\n" "$prog"
-                    ((added++))
-                fi
-            done
-        fi
-        echo ""
-        [[ $pruned -gt 0 ]] && echo "Pruned $pruned excluded entries"
-        echo "Added $added packages to manifest"
+        sat_scan
         ;;
 
     untrack)
@@ -268,7 +293,6 @@ case "$1" in
         [[ -z "$2" ]] && { echo "Usage: sat which <program> [program2] ..."; exit 1; }
         shift
         for prog in "$@"; do
-            # Get all installations
             all_sources=$(resolve_all_sources "$prog")
             if [[ -z "$all_sources" ]]; then
                 echo "$prog: not found"

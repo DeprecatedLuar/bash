@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
 # sat install - install programs from various sources
 
-# Download and install binary from GitHub releases
-# Usage: install_from_release <user/repo> <repo_name>
 install_from_release() {
     local repo_path="$1" repo_name="$2"
     local os arch base_url tmpdir
 
-    # Detect OS/arch
     case "$(uname -s)" in
         Linux*)  os="linux" ;;
         Darwin*) os="darwin" ;;
@@ -24,7 +21,6 @@ install_from_release() {
     tmpdir=$(mktemp -d)
     mkdir -p "$HOME/.local/bin"
 
-    # Try common naming patterns (first hit wins)
     local patterns=(
         "$repo_name-$os-$arch"
         "$repo_name-${os}-${arch}.tar.gz"
@@ -45,10 +41,8 @@ install_from_release() {
 
     [[ -z "$asset_name" ]] && { rm -rf "$tmpdir"; return 1; }
 
-    # Download
     wget -q -O "$tmpdir/$asset_name" "$base_url/$asset_name" || { rm -rf "$tmpdir"; return 1; }
 
-    # Extract or install directly
     case "$asset_name" in
         *.tar.gz|*.tgz)
             tar -xzf "$tmpdir/$asset_name" -C "$tmpdir"
@@ -57,7 +51,6 @@ install_from_release() {
             unzip -q "$tmpdir/$asset_name" -d "$tmpdir" 2>/dev/null
             ;;
         *)
-            # Raw binary
             chmod +x "$tmpdir/$asset_name"
             mv "$tmpdir/$asset_name" "$HOME/.local/bin/$repo_name"
             rm -rf "$tmpdir"
@@ -65,7 +58,6 @@ install_from_release() {
             ;;
     esac
 
-    # Find the binary in extracted files
     local binary
     binary=$(find "$tmpdir" -type f -name "$repo_name" 2>/dev/null | head -1)
     [[ -z "$binary" ]] && binary=$(find "$tmpdir" -type f -executable ! -name "*.sh" 2>/dev/null | head -1)
@@ -85,7 +77,6 @@ sat_install() {
     local DEFAULT_SOURCE=""
     local -a SPECS=()
 
-    # Parse args: flags set default source, others are tool specs
     for arg in "$@"; do
         case "$arg" in
             --system|--sys) DEFAULT_SOURCE="system" ;;
@@ -100,16 +91,14 @@ sat_install() {
     done
 
     for SPEC in "${SPECS[@]}"; do
-        # Parse tool:source syntax
         parse_tool_spec "$SPEC"
         local PROGRAM="$_TOOL_NAME"
         local FORCE_SOURCE="${_TOOL_SOURCE:-$DEFAULT_SOURCE}"
-        # Handle GitHub repo format (user/repo)
+
         if [[ "$PROGRAM" == */* ]]; then
             local REPO_PATH="$PROGRAM"
             local REPO_NAME="${PROGRAM##*/}"
 
-            # Try install.sh (main branch)
             local INSTALL_URL="https://raw.githubusercontent.com/$REPO_PATH/main/install.sh"
             curl -sSL --fail --head "$INSTALL_URL" >/dev/null 2>&1 &
             spin_with_style "$REPO_NAME" $! "repo"
@@ -120,7 +109,6 @@ sat_install() {
                 continue
             fi
 
-            # Try master branch
             INSTALL_URL="https://raw.githubusercontent.com/$REPO_PATH/master/install.sh"
             curl -sSL --fail --head "$INSTALL_URL" >/dev/null 2>&1 &
             spin_with_style "$REPO_NAME" $! "repo"
@@ -131,7 +119,6 @@ sat_install() {
                 continue
             fi
 
-            # Try GitHub releases (download binary)
             install_from_release "$REPO_PATH" "$REPO_NAME" &
             spin_with_style "$REPO_NAME" $! "repo"
             if wait $!; then
@@ -140,7 +127,6 @@ sat_install() {
                 continue
             fi
 
-            # Try go install
             if command -v go &>/dev/null; then
                 go install "github.com/$REPO_PATH@latest" &>/dev/null &
                 spin_with_style "$REPO_NAME" $! "go"
@@ -155,7 +141,6 @@ sat_install() {
             continue
         fi
 
-        # Check if already installed (skip if forcing)
         if [[ -z "$FORCE_SOURCE" ]] && command -v "$PROGRAM" &>/dev/null; then
             local existing_src=$(detect_source "$PROGRAM")
             local display=$(source_display "$existing_src")
@@ -165,7 +150,6 @@ sat_install() {
             continue
         fi
 
-        # Forced source install
         if [[ -n "$FORCE_SOURCE" ]]; then
             try_source "$PROGRAM" "$FORCE_SOURCE" &
             spin_with_style "$PROGRAM" $! "$FORCE_SOURCE"
@@ -178,7 +162,6 @@ sat_install() {
             continue
         fi
 
-        # Fallback chain
         if install_with_fallback "$PROGRAM"; then
             manifest_add "$PROGRAM" "$_INSTALL_SOURCE"
             status_ok "$PROGRAM" "$_INSTALL_SOURCE"
