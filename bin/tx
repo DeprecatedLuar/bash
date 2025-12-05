@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# tx (taxi) - quick directory navigation and file transport
+
+expand() {
+    case "$1" in
+        w/*)  echo "$WORKSPACE/${1#w/}" ;;
+        t/*)  echo "$TOOLS/${1#t/}" ;;
+        f/*)  echo "$FOREIGN/${1#f/}" ;;
+        h/*)  echo "$HOMEMADE/${1#h/}" ;;
+        c/*)  echo "$HOME/.config/${1#c/}" ;;
+        b/*)  echo "$HOME/bin/${1#b/}" ;;
+        sb/*) echo "/usr/local/bin/${1#sb/}" ;;
+        lb/*) echo "$HOME/.local/bin/${1#lb/}" ;;
+        w)    echo "$WORKSPACE" ;;
+        t)    echo "$TOOLS" ;;
+        f)    echo "$FOREIGN" ;;
+        h)    echo "$HOMEMADE" ;;
+        c)    echo "$HOME/.config" ;;
+        b)    echo "$HOME/bin" ;;
+        sb)   echo "/usr/local/bin" ;;
+        lb)   echo "$HOME/.local/bin" ;;
+        *)    echo "$1" ;;
+    esac
+}
+
+if [[ $# -eq 2 ]]; then
+    mv "$(expand "$1")" "$(expand "$2")"
+elif [[ $# -eq 1 ]]; then
+    cd "$(expand "$1")"
+else
+    echo "w=workspace t=tools f=foreign h=homemade c=config b=bin sb=sysbin lb=localbin"
+fi

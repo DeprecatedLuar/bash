@@ -8,27 +8,14 @@ reload() {
 
 alias deploy-noruelga='$BASHRC/bin/lib/noruelga.sh'
 
-ensure-dirs() {
-    $BASHRC/bin/lib/ensure-dirs.sh "$@"
-}
-
 alias eup='$EDITOR $BASHRC/modules/universal/paths.sh'
 alias eua='$EDITOR $BASHRC/modules/universal/aliases.sh'
 alias el='$EDITOR $BASHRC/modules/local.sh'
 
 alias ed='$EDITOR $BASHRC/modules/defaults/defaults.sh'
 
-conf() {
-    case "$1" in
-        xdg)      $EDITOR "$BASHRC/modules/universal/xdg.sh" ;;
-        bashrc)   $EDITOR "$BASHRC/bashrc" ;;
-        alias|aliases)  $EDITOR "$BASHRC/modules/universal/aliases.sh" ;;
-        paths)    $EDITOR "$BASHRC/modules/universal/paths.sh" ;;
-        local)    $EDITOR "$BASHRC/modules/local.sh" ;;
-        defaults) $EDITOR "$BASHRC/modules/defaults/defaults.sh" ;;
-        *)        echo "Usage: conf {xdg|bashrc|aliases|paths|local|defaults}" ;;
-    esac
-} 
+alias tx='. $BASHRC/bin/tx'
+
 
 
 
