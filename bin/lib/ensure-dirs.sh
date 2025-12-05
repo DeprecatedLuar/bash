@@ -4,7 +4,7 @@
 
 # Source paths if not already loaded
 if [ -z "$BASHRC" ]; then
-    source "$HOME/.config/bash/modules/universal/paths.sh"
+    source "${BASHRC:-$HOME/.config/lushrc}/modules/universal/paths.sh"
 fi
 
 #--[HOME-LEVEL DIRECTORIES]---------------------
@@ -41,8 +41,8 @@ mkdir -p "$TOOLS/bin/completions"
 #--[CRITICAL SHELL SYMLINKS]-------------------
 
 # Ensure shell config symlinks exist
-ln -sf "$HOME/.config/bash/bashrc" "$HOME/.bashrc" 2>/dev/null || true
-ln -sf "$HOME/.config/bash/profile" "$HOME/.profile" 2>/dev/null || true
+ln -sf "$BASHRC/bashrc" "$HOME/.bashrc" 2>/dev/null || true
+ln -sf "$BASHRC/profile" "$HOME/.profile" 2>/dev/null || true
 
 #--[CONVENIENCE SYMLINKS]-----------------------
 
@@ -58,7 +58,7 @@ if [[ "$1" == "-v" ]] || [[ "$1" == "--verbose" ]]; then
     echo "  Media: Audio, Pictures, Videos"
     echo "  Workspace: projects, shared, tools"
     echo "  Tools: foreign, homemade, docker, bin"
-    echo "  Shell: ~/.bashrc → .config/bash/bashrc"
-    echo "  Shell: ~/.profile → .config/bash/profile"
+    echo "  Shell: ~/.bashrc → $BASHRC/bashrc"
+    echo "  Shell: ~/.profile → $BASHRC/profile"
     echo "  Convenience: ~/Local → .local, ~/Config → .config"
 fi

@@ -233,7 +233,7 @@ RCFILE_VARS
     cat >> "$rcfile" << 'RCFILE_MAIN'
 
 # Source sat common for install functions
-source "$HOME/.config/bash/bin/lib/sat/common.sh"
+source "$BASHRC/bin/lib/sat/common.sh"
 
 # Use shell-specific install order (no sudo preferred)
 INSTALL_ORDER=("${SHELL_INSTALL_ORDER[@]}")

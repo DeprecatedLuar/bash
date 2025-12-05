@@ -253,10 +253,10 @@ resolve_all_sources() {
 
     # Define search paths for each ecosystem
     declare -A eco_paths=(
-        [cargo]="$HOME/.cargo/bin $HOME/.config/bash/dev-tools/cargo/bin"
-        [npm]="$HOME/.config/bash/dev-tools/npm/bin $HOME/.npm-global/bin"
+        [cargo]="$HOME/.cargo/bin $BASHRC/dev-tools/cargo/bin"
+        [npm]="$BASHRC/dev-tools/npm/bin $HOME/.npm-global/bin"
         [uv]="$HOME/.local/share/uv/tools/*/bin"
-        [go]="$HOME/go/bin $HOME/.config/bash/dev-tools/go/bin"
+        [go]="$HOME/go/bin $BASHRC/dev-tools/go/bin"
         [brew]="/home/linuxbrew/.linuxbrew/bin"
         [nix]="$HOME/.nix-profile/bin"
         [system]="/usr/bin /usr/local/bin /usr/games"

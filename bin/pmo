@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # Power management for postmarketOS
 
-PMO_LIB="$HOME/.config/bash/bin/lib/pmo"
+PMO_LIB="${BASHRC:-$HOME/.config/lushrc}/bin/lib/pmo"
 FB_BLANK="/sys/class/graphics/fb0/blank"
 BL_PATH="/sys/class/backlight/backlight"
 CHARGE_LIMIT="/sys/class/power_supply/qcom-smbchg-usb/input_current_limit"

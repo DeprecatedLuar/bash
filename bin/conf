@@ -10,6 +10,13 @@ edit() {
 }
 
 case "$1" in
+  # shell configs
+  bashrc)       edit "$BASHRC/bashrc" ;;
+  alias|aliases) edit "$BASHRC/modules/universal/aliases.sh" ;;
+  path|paths)   edit "$BASHRC/modules/universal/paths.sh" ;;
+  local)       edit "$BASHRC/modules/local.sh" ;;
+  defaults)    edit "$BASHRC/modules/defaults/defaults.sh" ;;
+  # system configs
   ssh)         edit ~/.ssh/config ;;
   hosts)       edit /etc/hosts ;;
   fstab)       edit /etc/fstab ;;
@@ -23,7 +30,14 @@ case "$1" in
   ""|--help|-h)
     echo "Usage: conf <config>"
     echo ""
-    echo "Configs:"
+    echo "Shell:"
+    echo "  bashrc       $BASHRC/bashrc"
+    echo "  aliases      $BASHRC/modules/universal/aliases.sh"
+    echo "  paths        $BASHRC/modules/universal/paths.sh"
+    echo "  local        $BASHRC/modules/local.sh"
+    echo "  defaults     $BASHRC/modules/defaults/defaults.sh"
+    echo ""
+    echo "System:"
     echo "  ssh          ~/.ssh/config"
     echo "  hosts        /etc/hosts"
     echo "  fstab        /etc/fstab"

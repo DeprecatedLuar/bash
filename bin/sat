@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # sat - Satellite installer (router)
 
-source "$HOME/.config/bash/modules/universal/paths.sh"
+source "${BASHRC:-$HOME/.config/lushrc}/modules/universal/paths.sh"
 source "$BASHRC/bin/lib/sat/common.sh"
 
 # Clean up orphaned sessions from crashed sat shells
@@ -155,10 +155,10 @@ case "$1" in
         [[ -n "$SAT_SESSION" ]] && session_manifest="/tmp/sat-shell/$SAT_SESSION/manifest"
 
         declare -A scan_dirs=(
-            ["cargo"]="$HOME/.cargo/bin $HOME/.config/bash/dev-tools/cargo/bin"
-            ["npm"]="$HOME/.config/bash/dev-tools/npm/bin $HOME/.npm-global/bin"
+            ["cargo"]="$HOME/.cargo/bin $BASHRC/dev-tools/cargo/bin"
+            ["npm"]="$BASHRC/dev-tools/npm/bin $HOME/.npm-global/bin"
             ["uv"]="$HOME/.local/share/uv/tools"
-            ["go"]="$HOME/go/bin $HOME/.config/bash/dev-tools/go/bin"
+            ["go"]="$HOME/go/bin $BASHRC/dev-tools/go/bin"
             ["brew"]="/home/linuxbrew/.linuxbrew/bin"
             ["nix"]="$HOME/.nix-profile/bin"
         )
@@ -265,7 +265,7 @@ case "$1" in
         ;;
 
     update)
-        cd "$HOME/.config/bash" || exit 1
+        cd "$BASHRC" || exit 1
         git pull
         ;;
 

@@ -3,8 +3,8 @@
 
 set -e
 
-TARGET="$HOME/.config/bash"
-REPO="https://github.com/DeprecatedLuar/bash.git"
+TARGET="$HOME/.config/lushrc"
+REPO="https://github.com/DeprecatedLuar/lushrc.git"
 
 command -v git >/dev/null || { echo "Error: git required"; exit 1; }
 
@@ -14,7 +14,7 @@ if [ -d "$TARGET/.git" ]; then
     git -C "$TARGET" pull
 else
     rm -rf "$TARGET"
-    git clone "$REPO" "$TARGET"
+    git clone -b main "$REPO" "$TARGET"
 fi
 
 ln -sf "$TARGET/bashrc" "$HOME/.bashrc"

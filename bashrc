@@ -9,11 +9,16 @@
 # esac
 
 # =====================================================
+# SHELL CONFIG ROOT (single source of truth)
+# =====================================================
+export BASHRC="$HOME/.config/lushrc"
+
+# =====================================================
 # HISTORY CONFIGURATION
 # =====================================================
 
 # Set history file location
-export HISTFILE="$HOME/.config/bash/.history"
+export HISTFILE="$BASHRC/.history"
 
 #don't put duplicate lines or lines starting with space in the history.
 HISTCONTROL=ignoreboth
@@ -32,15 +37,15 @@ fi
 # DEVELOPMENT TOOLS CONFIGURATION
 # =====================================================
 
-# Rust tools - organized in bash config folder
-export CARGO_HOME="$HOME/.config/bash/dev-tools/cargo"
-export RUSTUP_HOME="$HOME/.config/bash/dev-tools/rustup"
+# Rust tools - organized in shell config folder
+export CARGO_HOME="$BASHRC/dev-tools/cargo"
+export RUSTUP_HOME="$BASHRC/dev-tools/rustup"
 
-# Go tools - organized in bash config folder
-export GOPATH="$HOME/.config/bash/dev-tools/go"
+# Go tools - organized in shell config folder
+export GOPATH="$BASHRC/dev-tools/go"
 
-# npm - organized in bash config folder
-export NPM_CONFIG_PREFIX="$HOME/.config/bash/dev-tools/npm"
+# npm - organized in shell config folder
+export NPM_CONFIG_PREFIX="$BASHRC/dev-tools/npm"
 
 # Micro editor - enable true color support for colorschemes
 export MICRO_TRUECOLOR=1
@@ -158,7 +163,7 @@ fi
 #------- LOAD CUSTOM CONFIGURATIONS -------
 
 # Load all custom configurations
-[ -f ~/.config/bash/modules/universal/source.sh ] && source ~/.config/bash/modules/universal/source.sh
+[ -f "$BASHRC/modules/universal/source.sh" ] && source "$BASHRC/modules/universal/source.sh"
 
 # Cleanup broken symlinks (self-healing)
 find "$HOME" "$HOME/.config" -maxdepth 1 -xtype l -delete 2>/dev/null
