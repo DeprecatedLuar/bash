@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # conf - Quick access to Linux system config files
 
+action=edit
+
 edit() {
   if [[ "$1" == /etc/* ]] && [[ ! -w "$1" ]]; then
     sudo ${EDITOR:-vim} "$1"
@@ -9,26 +11,52 @@ edit() {
   fi
 }
 
+view() {
+  if [[ "$1" == /etc/* ]] && [[ ! -r "$1" ]]; then
+    sudo cat "$1"
+  else
+    cat "$1"
+  fi
+}
+
+if [[ "$1" == "cat" ]]; then
+  action=view
+  shift
+fi
+
 case "$1" in
   # shell configs
-  bashrc)       edit "$BASHRC/bashrc" ;;
-  alias|aliases) edit "$BASHRC/modules/universal/aliases.sh" ;;
-  path|paths)   edit "$BASHRC/modules/universal/paths.sh" ;;
-  local)       edit "$BASHRC/modules/local.sh" ;;
-  defaults)    edit "$BASHRC/modules/defaults/defaults.sh" ;;
+  bashrc)       $action "$BASHRC/bashrc" ;;
+  alias|aliases) $action "$BASHRC/modules/universal/aliases.sh" ;;
+  path|paths)   $action "$BASHRC/modules/universal/paths.sh" ;;
+  local)        $action "$BASHRC/modules/local.sh" ;;
+  defaults)     $action "$BASHRC/modules/defaults/defaults.sh" ;;
   # system configs
-  ssh)         edit ~/.ssh/config ;;
-  hosts)       edit /etc/hosts ;;
-  fstab)       edit /etc/fstab ;;
-  environment) edit /etc/environment ;;
-  hostname)    edit /etc/hostname ;;
-  resolv)      edit /etc/resolv.conf ;;
-  grub)        edit /etc/default/grub ;;
-  sources)     edit /etc/apt/sources.list ;;
-  profile)     edit /etc/profile ;;
-  nix|nixos)   edit /etc/nixos/configuration.nix ;;
+  ssh)          $action ~/.ssh/config ;;
+  hosts)        $action /etc/hosts ;;
+  fstab)        $action /etc/fstab ;;
+  environment)  $action /etc/environment ;;
+  hostname)     $action /etc/hostname ;;
+  resolv)       $action /etc/resolv.conf ;;
+  grub)         $action /etc/default/grub ;;
+  sources)      $action /etc/apt/sources.list ;;
+  profile)      $action /etc/profile ;;
+  nix|nixos)
+    nixdir="/etc/nixos"
+    case "$2" in
+      ""|config)      $action "$nixdir/configuration.nix" ;;
+      pkg|packages)   $action "$nixdir/packages.nix" ;;
+      net|network)    $action "$nixdir/network.nix" ;;
+      users)          $action "$nixdir/users.nix" ;;
+      services|svc)   $action "$nixdir/services.nix" ;;
+      *)              $action "$nixdir/$2.nix" ;;
+    esac
+    ;;
   ""|--help|-h)
-    echo "Usage: conf <config>"
+    echo "Usage: conf [cat] <config>"
+    echo ""
+    echo "  conf aliases      Edit aliases"
+    echo "  conf cat aliases  View aliases"
     echo ""
     echo "Shell:"
     echo "  bashrc       $BASHRC/bashrc"
@@ -47,7 +75,14 @@ case "$1" in
     echo "  grub         /etc/default/grub"
     echo "  sources      /etc/apt/sources.list"
     echo "  profile      /etc/profile"
-    echo "  nix|nixos    /etc/nixos/configuration.nix"
+    echo ""
+    echo "NixOS (/etc/nixos/):"
+    echo "  nix [config]     configuration.nix"
+    echo "  nix pkg          packages.nix"
+    echo "  nix network      network.nix"
+    echo "  nix users        users.nix"
+    echo "  nix services     services.nix"
+    echo "  nix <name>       <name>.nix"
     ;;
   *)
     echo "Unknown config: $1"

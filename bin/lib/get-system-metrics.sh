@@ -96,10 +96,26 @@ for metric in "${metrics[@]}"; do
                 [[ -n "$usage" && -n "$nv_temp" ]] && printf "GPU %s%% (%s°C)\n" "$usage" "${nv_temp%%.*}"
             fi
             ;;
-        fan)
-            command -v sensors &>/dev/null && sensors | awk '/^fan[0-9]+:/ && /RPM/ {
-                match($0, /[[:space:]]+([0-9]+) RPM/, a); sum+=a[1]; count++
-            } END {if(count>0) printf "FAN %.0frpm\n", sum/count}'
+        fan|fans)
+            if [[ ${#metrics[@]} -eq 1 ]]; then
+                # Detailed output
+                command -v sensors &>/dev/null && sensors | awk '/^fan[0-9]+:/ && /RPM/ {
+                    name = $1; gsub(/:/, "", name); toupper(name)
+                    match($0, /[[:space:]]+([0-9]+) RPM/, cur)
+                    match($0, /max = ([0-9]+) RPM/, mx)
+                    current = cur[1]; max = mx[1]
+                    if (max > 0) {
+                        pct = int(current * 100 / max)
+                        printf "%s %drpm (%d%% of %drpm)\n", toupper(name), current, pct, max
+                    } else {
+                        printf "%s %drpm\n", toupper(name), current
+                    }
+                }'
+            else
+                command -v sensors &>/dev/null && sensors | awk '/^fan[0-9]+:/ && /RPM/ {
+                    match($0, /[[:space:]]+([0-9]+) RPM/, a); sum+=a[1]; count++
+                } END {if(count>0) printf "FAN %.0frpm\n", sum/count}'
+            fi
             ;;
         bat)
             for psu in /sys/class/power_supply/*; do
