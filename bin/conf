@@ -26,7 +26,7 @@ case "$1" in
   grub)        edit /etc/default/grub ;;
   sources)     edit /etc/apt/sources.list ;;
   profile)     edit /etc/profile ;;
-  nix)         edit /etc/nixos/configuration.nix ;;
+  nix|nixos)   edit /etc/nixos/configuration.nix ;;
   ""|--help|-h)
     echo "Usage: conf <config>"
     echo ""
@@ -47,7 +47,7 @@ case "$1" in
     echo "  grub         /etc/default/grub"
     echo "  sources      /etc/apt/sources.list"
     echo "  profile      /etc/profile"
-    echo "  nix          /etc/nixos/configuration.nix"
+    echo "  nix|nixos    /etc/nixos/configuration.nix"
     ;;
   *)
     echo "Unknown config: $1"
