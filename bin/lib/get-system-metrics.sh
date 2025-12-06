@@ -11,12 +11,21 @@ for metric in "${metrics[@]}"; do
                 /^CPU:/ {gsub(/%/,"",$2); cpu=$2}
                 END {if(cpu) printf "%.0f", cpu}
             ')
-            temp=$(sensors 2>/dev/null | grep -E '^(Package id 0|Core 0|temp1):' | head -1 | sed 's/.*+\([0-9.]*\).*/\1/')
-            if [[ -n "$usage" ]]; then
-                if [[ -n "$temp" ]]; then
-                    printf "CPU %s%% (%.0f°C)\n" "$usage" "$temp"
-                else
-                    printf "CPU %s%%\n" "$usage"
+            temp=$(sensors 2>/dev/null | grep -E '^(Package id 0|Core 0|temp1):' | head -1 | sed 's/^[^+]*+\([0-9.]*\).*/\1/')
+            if [[ ${#metrics[@]} -eq 1 ]]; then
+                # Detailed output
+                if [[ -n "$usage" ]]; then
+                    [[ -n "$temp" ]] && printf "CPU %s%% (%.0f°C)\n" "$usage" "$temp" || printf "CPU %s%%\n" "$usage"
+                fi
+                sensors 2>/dev/null | awk '/^Core [0-9]+:/ {gsub(/\+|°C/,""); printf "%s %s°C\n", $1$2, $3}'
+                echo ""
+                ps aux --sort=-%cpu | awk 'NR>1 && $3>3 {
+                    cmd=$11; gsub(/^.*\//, "", cmd)
+                    printf "%.0f%% %s (%s)\n", $3, cmd, $2
+                }'
+            else
+                if [[ -n "$usage" ]]; then
+                    [[ -n "$temp" ]] && printf "CPU %s%% (%.0f°C)\n" "$usage" "$temp" || printf "CPU %s%%\n" "$usage"
                 fi
             fi
             ;;
@@ -37,7 +46,35 @@ for metric in "${metrics[@]}"; do
             fi
             ;;
         gpu)
-            if command -v nvidia-smi &>/dev/null; then
+            # Detect hybrid setup
+            has_igpu=$(lspci 2>/dev/null | grep -qi '00:02.0.*vga' && echo 1)
+            discrete_addr=$(lspci -D 2>/dev/null | grep -iE 'vga|3d' | grep -v '0000:00:02' | awk '{print $1}' | head -1)
+
+            # iGPU - use frequency as activity indicator
+            if [[ -n "$has_igpu" ]]; then
+                igpu_card=$(for c in /sys/class/drm/card[0-9]; do [[ -f "$c/gt_cur_freq_mhz" ]] && echo "$c" && break; done)
+                cur_freq=$(cat "$igpu_card/gt_cur_freq_mhz" 2>/dev/null)
+                max_freq=$(cat "$igpu_card/gt_max_freq_mhz" 2>/dev/null)
+                if [[ -n "$cur_freq" && -n "$max_freq" && "$max_freq" -gt 0 ]]; then
+                    pct=$((cur_freq * 100 / max_freq))
+                    printf "iGPU %s%%\n" "$pct"
+                elif [[ -n "$discrete_addr" ]]; then
+                    printf "iGPU\n"
+                fi
+            fi
+
+            # dGPU with stats
+            if [[ -n "$discrete_addr" ]]; then
+                power_state=$(cat "/sys/bus/pci/devices/$discrete_addr/power/runtime_status" 2>/dev/null)
+                if [[ "$power_state" == "suspended" ]]; then
+                    printf "dGPU [suspended]\n"
+                elif command -v nvidia-smi &>/dev/null; then
+                    usage=$(nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits 2>/dev/null | head -1 | xargs)
+                    temp=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader 2>/dev/null | head -1)
+                    [[ -n "$usage" && -n "$temp" ]] && printf "dGPU %s%% (%.0f°C)\n" "$usage" "$temp"
+                fi
+            elif command -v nvidia-smi &>/dev/null; then
+                # Single NVIDIA GPU (no hybrid)
                 usage=$(nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits 2>/dev/null | head -1 | xargs)
                 temp=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader 2>/dev/null | head -1)
                 [[ -n "$usage" && -n "$temp" ]] && printf "GPU %s%% (%.0f°C)\n" "$usage" "$temp"
