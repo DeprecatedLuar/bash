@@ -79,3 +79,7 @@ setup_sys "$HOME/.config/autostart"
 
 ln -sf "$BASHRC/modules/universal/xdg.sh" "$HOME/.config/user-dirs.dirs"
 
+#--[FONTS]--------------------------------------
+
+[ -d "$HOME/.config/fonts" ] && ln -sfn "$HOME/.config/fonts" "$HOME/.local/share/fonts"
+
